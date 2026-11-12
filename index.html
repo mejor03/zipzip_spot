@@ -48,6 +48,15 @@
   .chip small{font-size:11px;color:var(--ink3)}
   .chip.on{border-color:var(--c);background:color-mix(in srgb,var(--c) 9%,#fff)}
   .chip.on b{color:var(--c)}
+  .aptf{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+  .aptf label{font-size:11.5px;color:var(--ink3);font-weight:600;display:flex;flex-direction:column;gap:4px}
+  .aptf select{height:38px;border:1.5px solid var(--line);border-radius:10px;padding:0 8px;font:inherit;font-size:13.5px;color:var(--ink);background:#fff}
+  .aptf select.on{border-color:var(--accent);background:var(--accent-soft);font-weight:600}
+  .chk{display:flex;gap:8px;align-items:flex-start;font-size:13px;margin-top:8px;cursor:pointer;line-height:1.4}
+  .chk input{margin-top:2px}
+  .chk small{display:block;color:var(--ink3);font-size:11.5px}
+  .kstat{font-size:11.5px;color:var(--ink3);margin-top:6px;line-height:1.45}
+  .kstat.warn{color:var(--mid)}
   .wide{width:100%;margin-top:10px;height:42px!important;font-size:14px!important}
   .findinfo{font-size:12.5px;color:var(--ink2);margin:12px 0 8px;line-height:1.5}
   .findinfo.err{color:#b3261e;background:#fdecea;border-radius:9px;padding:10px 12px}
@@ -59,6 +68,8 @@
   .ai-top b{font-size:14.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .ai-sc{font-weight:800;font-size:15px;color:var(--accent);flex:none}
   .ai-sc small{font-weight:500;color:var(--ink3);font-size:11px}
+  .ai-k{font-size:12px;color:var(--ink2);margin-top:2px;font-weight:600}
+  .ai-k.none{color:var(--ink3);font-weight:500}
   .ai-ad{font-size:11.5px;color:var(--ink3);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .ai-b{display:flex;flex-wrap:wrap;gap:4px;margin-top:7px}
   .ai-b span{font-size:11.5px;padding:2px 7px;border-radius:6px;background:var(--no-soft);color:var(--no);font-variant-numeric:tabular-nums}
@@ -68,6 +79,7 @@
   .place{padding:14px 16px;border:1px solid var(--line);border-radius:var(--r);background:#fcfcfb}
   .place .nm{font-weight:700;font-size:16px;letter-spacing:-.2px}
   .place .ad{color:var(--ink2);font-size:12.5px;margin-top:3px}
+  .place .kinfo{font-size:12.5px;margin-top:6px;color:var(--accent);font-weight:600}
   .score{display:flex;align-items:center;gap:14px;margin-top:12px}
   .ring{--p:0;width:76px;height:76px;border-radius:50%;background:conic-gradient(var(--accent) calc(var(--p)*1%),#e9ebef 0);display:grid;place-items:center;flex:none}
   .ring>div{width:62px;height:62px;border-radius:50%;background:#fcfcfb;display:grid;place-items:center;text-align:center}
@@ -186,6 +198,30 @@
       <section id="tabFind">
         <div class="sec-title" style="margin-top:2px">조건 선택 <span class="muted">고른 조건을 모두 만족하는 단지만 표시</span></div>
         <div class="chips" id="chips"></div>
+        <div class="sec-title">단지 조건 <span class="muted">준공연도 · 세대수</span></div>
+        <div class="aptf">
+          <label>준공
+            <select id="fAge">
+              <option value="">전체</option>
+              <option value="5">5년 이내 (신축)</option>
+              <option value="10">10년 이내</option>
+              <option value="15">15년 이내</option>
+              <option value="20">20년 이내</option>
+              <option value="-20">20년 이상</option>
+              <option value="-30">30년 이상 (노후)</option>
+            </select></label>
+          <label>세대수
+            <select id="fHh">
+              <option value="">전체</option>
+              <option value="100">100세대 이상</option>
+              <option value="300">300세대 이상</option>
+              <option value="500">500세대 이상</option>
+              <option value="1000">1,000세대 이상</option>
+              <option value="2000">2,000세대 이상</option>
+            </select></label>
+        </div>
+        <label class="chk"><input type="checkbox" id="fKnown"><span>단지 정보가 확인된 곳만 보기<small>공동주택관리정보시스템(K-apt)에 등록되지 않은 나홀로·소규모 단지를 뺍니다</small></span></label>
+        <div class="kstat" id="kstat">단지 정보 불러오는 중…</div>
         <button class="btn primary wide" id="findBtn">지금 보이는 지역에서 아파트 찾기</button>
         <div class="findinfo" id="findInfo">지도를 원하는 동네로 옮긴 뒤 버튼을 누르세요.</div>
         <div id="aptList"></div>
@@ -195,6 +231,7 @@
       <section id="tabDetail" class="hide">
         <div class="place">
           <div class="nm" id="pName">분석할 단지를 고르세요</div>
+          <div class="kinfo" id="pK"></div>
           <div class="ad" id="pAddr">'아파트 찾기' 목록에서 단지를 누르거나, 지도를 클릭하면 그 지점을 분석합니다.</div>
           <div class="score">
             <div class="ring" id="ring" style="--p:0"><div><div><b id="total">–</b><small>/ 100</small></div></div></div>
@@ -247,11 +284,12 @@
 </div>
 <div class="toast" id="toast"></div>
 
+<script src="config.js"></script>
 <script>
 /* =========================================================
-   설정 — APP_KEY에 JavaScript 키를 넣으면 입력창 없이 바로 시작합니다.
+   설정 — 카카오 JavaScript 키는 같은 폴더의 config.js 에 넣습니다.
    ========================================================= */
-const APP_KEY = 'f75b8f9f7f31354891c89d7fccbb1d38';
+const APP_KEY = (window.KAKAO_APP_KEY || '').trim();   // config.js 에서 읽음 (없으면 첫 화면에서 입력)
 const DEFAULT_CENTER = { lat: 37.5115, lng: 127.0860 };   // 처음 열 때 위치 (잠실)
 const WALK_M_PER_MIN = 67;
 const MAX_MARKERS_PER_CAT = 15;
@@ -334,6 +372,127 @@ function gradeOf(total){
   if (total >= 60) return ['양호', '주요 시설 대부분이 가까운 편이며 일부 항목만 거리가 있습니다.'];
   if (total >= 40) return ['보통', '일부 시설은 도보권 밖으로 차량·대중교통 이용이 필요합니다.'];
   return ['취약', '생활편의시설 접근성이 낮은 편입니다. 개발계획 등 보완 요인을 함께 보세요.'];
+}
+
+/* ---------- 단지 기본정보 (K-apt, GitHub Actions가 매일 수집한 data/apts.json) ---------- */
+const THIS_YEAR = new Date().getFullYear();
+let KAPT = { ready:false, byRoad:new Map(), byDong:new Map(), total:0, count:0, updated:'', error:'' };
+let aptf = Object.assign({ age:'', hh:'', known:false }, LS.get('lm_aptf', {}));
+
+function aptDataUrls(){
+  const urls = [];
+  const m = location.hostname.match(/^([^.]+)\.github\.io$/i);
+  const repo = location.pathname.split('/').filter(Boolean)[0];
+  if (m && repo && !/\.html?$/i.test(repo)) urls.push(`https://raw.githubusercontent.com/${m[1]}/${repo}/main/data/apts.json`);
+  urls.push('data/apts.json');
+  return urls;
+}
+const addrTokens = a => String(a || '').replace(/\(.*?\)/g, ' ').replace(/,/g, ' ').trim().split(/\s+/).filter(Boolean);
+function roadKey(addr){
+  const t = addrTokens(addr);
+  for (let i = 1; i < t.length - 1; i++)
+    if (/(로|길)$/.test(t[i]) && /^\d+(-\d+)?$/.test(t[i+1])) return t[i-1] + ' ' + t[i] + ' ' + t[i+1].replace(/-0$/, '');
+  return '';
+}
+function dongKey(addr){
+  const t = addrTokens(addr);
+  for (let i = 1; i < t.length; i++)
+    if (/^[가-힣][가-힣0-9]*(동|리|가)$/.test(t[i])) return t[i-1].replace(/(특별시|광역시|특별자치시|특별자치도|도)$/, '') + ' ' + t[i];
+  return '';
+}
+const nameNorm = n => String(n || '').toLowerCase().replace(/\(.*?\)/g, '').replace(/아파트|apt|apartment/g, '').replace(/[^0-9a-z가-힣]/g, '');
+function nameSim(a, b){
+  if (!a || !b) return 0;
+  const da = (a.match(/\d+/g) || []).join(','), db = (b.match(/\d+/g) || []).join(',');
+  const numClash = da && db && da !== db;
+  let sc;
+  if (a === b) sc = 1;
+  else if ((a.includes(b) || b.includes(a)) && Math.min(a.length, b.length) >= 2) sc = .85;
+  else {
+    const bg = x => { const m = new Map(); for (let i = 0; i < x.length - 1; i++){ const g = x.slice(i, i+2); m.set(g, (m.get(g) || 0) + 1); } return m; };
+    const A = bg(a), B = bg(b); let inter = 0;
+    A.forEach((v, g) => inter += Math.min(v, B.get(g) || 0));
+    sc = (2 * inter) / Math.max(1, (a.length - 1) + (b.length - 1));
+  }
+  return numClash ? Math.min(sc, .3) : sc;
+}
+function indexKapt(j){
+  KAPT.byRoad = new Map(); KAPT.byDong = new Map();
+  for (const r of (j.items || [])) {
+    r._nn = nameNorm(r.n);
+    const rk = roadKey(r.r); if (rk) { if (!KAPT.byRoad.has(rk)) KAPT.byRoad.set(rk, []); KAPT.byRoad.get(rk).push(r); }
+    const dk = dongKey(r.a); if (dk) { if (!KAPT.byDong.has(dk)) KAPT.byDong.set(dk, []); KAPT.byDong.get(dk).push(r); }
+  }
+  KAPT.total = j.total || 0; KAPT.count = j.count || (j.items || []).length; KAPT.updated = j.updated || ''; KAPT.ready = true;
+}
+async function loadKapt(){
+  for (const url of aptDataUrls()) {
+    try {
+      const r = await fetch(url, { cache:'no-cache' });
+      if (!r.ok) continue;
+      indexKapt(await r.json());
+      break;
+    } catch(e) {}
+  }
+  if (!KAPT.ready) KAPT.error = 'missing';
+  renderKaptStatus();
+  if (area) { computeArea(); renderArea(); }
+  if (state.pos && state.summary && !state.k) { state.k = matchKapt({ name:state.name, addr:state.jibun, road:state.road }); renderK(); }
+}
+function matchKapt(a){
+  if (!KAPT.ready || !a) return null;
+  const nn = nameNorm(a.name);
+  let best = null, bs = 0;
+  const rk = roadKey(a.road);
+  if (rk) for (const r of KAPT.byRoad.get(rk) || []) { const sc = .6 + .4 * nameSim(nn, r._nn); if (sc > bs) { bs = sc; best = r; } }
+  const dk = dongKey(a.addr);
+  if (dk) for (const r of KAPT.byDong.get(dk) || []) { const sc = nameSim(nn, r._nn); if (sc > bs) { bs = sc; best = r; } }
+  return bs >= .55 ? best : null;
+}
+const kYear = k => k && /^\d{4}/.test(k.u || '') ? +k.u.slice(0, 4) : null;
+function kText(k, long){
+  if (!k) return '';
+  const y = kYear(k), parts = [];
+  if (y) parts.push(`${y}년 준공${long ? `(${THIS_YEAR - y}년차)` : ''}`);
+  if (k.h) parts.push(`${k.h.toLocaleString()}세대`);
+  if (k.d) parts.push(`${k.d}개동`);
+  return parts.join(' · ');
+}
+// 단지 조건 판정: 'ok' | 'cond'(조건 불충족) | 'nodata'(정보 없음)
+function aptCheck(a){
+  const need = aptf.age || aptf.hh || aptf.known;
+  if (!need) return 'ok';
+  const k = a.k;
+  if (!k) return 'nodata';
+  if (aptf.age) {
+    const y = kYear(k); if (!y) return 'nodata';
+    const n = +aptf.age, age = THIS_YEAR - y;
+    if (n > 0 ? age > n : age < -n) return 'cond';
+  }
+  if (aptf.hh) { if (!k.h) return 'nodata'; if (k.h < +aptf.hh) return 'cond'; }
+  return 'ok';
+}
+function renderKaptStatus(){
+  const el = $('kstat'); if (!el) return;
+  if (KAPT.ready) {
+    const pct = KAPT.total ? Math.round(KAPT.count / KAPT.total * 100) : 100;
+    el.className = 'kstat';
+    el.textContent = `단지 정보: 전국 ${KAPT.total.toLocaleString()}곳 중 ${KAPT.count.toLocaleString()}곳 확보(${pct}%) · ${KAPT.updated} 기준 · 출처 K-apt` + (pct < 100 ? ' — 매일 자동으로 채워지는 중' : '');
+  } else if (KAPT.error) {
+    el.className = 'kstat warn';
+    el.textContent = '단지 정보 파일(data/apts.json)이 아직 없어요. GitHub Actions에서 수집을 한 번 실행하면 준공·세대수 필터가 동작합니다.';
+  }
+  ['fAge','fHh'].forEach(id => $(id).classList.toggle('on', !!$(id).value));
+}
+function bindAptFilters(){
+  $('fAge').value = aptf.age; $('fHh').value = aptf.hh; $('fKnown').checked = !!aptf.known;
+  const upd = () => {
+    aptf = { age:$('fAge').value, hh:$('fHh').value, known:$('fKnown').checked };
+    LS.set('lm_aptf', aptf); renderKaptStatus();
+    if (area) renderArea();
+  };
+  $('fAge').onchange = upd; $('fHh').onchange = upd; $('fKnown').onchange = upd;
+  renderKaptStatus();
 }
 
 /* ---------- 카카오 SDK 로드 ---------- */
@@ -518,7 +677,7 @@ async function findApartments(){
   for (const p of aptR.items) {
     if (seen.has(p.id)) continue; seen.add(p.id);
     if (!/아파트\s*$/.test(p.category_name || '') || APT_NOISE.test(p.place_name.trim())) continue;
-    apts.push({ id:p.id, name:p.place_name, pos:{ lat:+p.y, lng:+p.x }, addr:p.road_address_name || p.address_name });
+    apts.push({ id:p.id, name:p.place_name, pos:{ lat:+p.y, lng:+p.x }, addr:p.road_address_name || p.address_name, jibun:p.address_name, road:p.road_address_name });
   }
   const fac = {};
   CATS.forEach((c, i) => fac[c.id] = facR[i].items);
@@ -541,6 +700,7 @@ function computeArea(){
   if (!area) return;
   const W = weightSum();
   area.apts.forEach(a => {
+    a.k = matchKapt({ name:a.name, addr:a.jibun, road:a.road });
     let total = 0;
     a.cats = {};
     CATS.forEach(c => {
@@ -563,28 +723,35 @@ function clearArea(){
 function renderArea(){
   clearArea();
   if (!area) return;
-  const pass = a => [...filters].every(id => a.cats[id] && a.cats[id].st.cls === 'on');
+  const lifePass = a => [...filters].every(id => a.cats[id] && a.cats[id].st.cls === 'on');
+  area.apts.forEach(a => a.chk = aptCheck(a));
+  const pass = a => a.chk === 'ok' && lifePass(a);
   const matched = area.apts.filter(pass);
   const rest = area.apts.filter(a => !pass(a));
   const fl = [...filters].map(id => CATS.find(c => c.id === id).label).join(' + ');
+  const aptOn = aptf.age || aptf.hh || aptf.known;
+  const nNo = area.apts.filter(a => a.chk === 'nodata').length, nCond = area.apts.filter(a => a.chk === 'cond').length;
+  const condTxt = [aptf.age ? $('fAge').selectedOptions[0].textContent.replace(/\s*\(.*\)/, '') + ' 준공' : '', aptf.hh ? $('fHh').selectedOptions[0].textContent : '', fl].filter(Boolean).join(' · ');
 
   const info = $('findInfo');
   info.className = 'findinfo';
   if (!area.apts.length) {
     info.innerHTML = '이 지역에서 아파트를 찾지 못했어요. 지도를 아파트가 많은 동네로 옮겨 보세요.';
   } else {
-    info.innerHTML = filters.size
-      ? `이 지역 아파트 <b>${area.apts.length}곳</b> 중 <b>${fl}</b> 조건을 모두 만족하는 곳 <b style="color:var(--ok)">${matched.length}곳</b>`
+    info.innerHTML = (filters.size || aptOn)
+      ? `이 지역 아파트 <b>${area.apts.length}곳</b> 중 ${condTxt ? `<b>${esc(condTxt)}</b> ` : ''}조건을 모두 만족하는 곳 <b style="color:var(--ok)">${matched.length}곳</b>` +
+        (aptOn ? `<br><span class="muted">단지 조건으로 제외: 조건 미달 ${nCond}곳 · 단지 정보 없음 ${nNo}곳${KAPT.ready ? '' : ' (단지 정보 파일 없음)'}</span>` : '')
       : `이 지역 아파트 <b>${area.apts.length}곳</b>을 생활권 점수 순으로 보여드려요. 위에서 조건을 고르면 걸러집니다.`;
   }
 
   const item = (a, dim) => `<div class="apt-item ${dim ? 'dim' : ''}" data-id="${esc(a.id)}">
     <div class="ai-top"><b>${esc(a.name)}</b><span class="ai-sc">${a.total}<small> 점</small></span></div>
+    <div class="ai-k ${a.k ? '' : 'none'}">${a.k ? kText(a.k) : (KAPT.ready ? '단지 정보 없음 (소규모·미등록)' : '')}</div>
     <div class="ai-ad">${esc(a.addr || '')}</div>
     <div class="ai-b">${CATS.map(c => { const v = a.cats[c.id]; return `<span class="${v.st.cls === 'no' ? '' : v.st.cls}" title="${esc(v.name)}">${c.icon} ${v.d == null ? '없음' : fmtD(v.d)}</span>`; }).join('')}</div>
   </div>`;
   let html = matched.slice(0, 150).map(a => item(a, false)).join('');
-  if (filters.size && rest.length) html += `<div class="sec-title" style="margin-top:14px">조건 미충족 ${rest.length}곳</div>` + rest.slice(0, 60).map(a => item(a, true)).join('');
+  if ((filters.size || aptOn) && rest.length) html += `<div class="sec-title" style="margin-top:14px">조건 미충족 ${rest.length}곳</div>` + rest.slice(0, 60).map(a => item(a, true)).join('');
   $('aptList').innerHTML = html;
   document.querySelectorAll('.apt-item').forEach(el => el.onclick = () => openApt(area.apts.find(a => a.id === el.dataset.id)));
 
@@ -594,7 +761,7 @@ function renderArea(){
     if (i < LABEL_LIMIT) { el.className = 'apt' + (a.id === selectedAptId ? ' sel' : ''); el.innerHTML = `<b>${a.total}</b>${esc(shortName(a.name))}`; }
     else el.className = 'aptdot';
     el.style.background = i < LABEL_LIMIT ? '' : 'var(--accent)';
-    el.title = `${a.name} · ${a.total}점`;
+    el.title = `${a.name} · ${a.total}점${a.k ? ' · ' + kText(a.k) : ''}`;
     el.onclick = ev => { ev.stopPropagation(); openApt(a); };
     const o = new kakao.maps.CustomOverlay({ position:kLL(a.pos), content:el, xAnchor:.5, yAnchor:i < LABEL_LIMIT ? 1.1 : .5, zIndex: 35 - Math.min(i, 30) + (a.id === selectedAptId ? 20 : 0), clickable:true });
     o.setMap(map); aptOverlays.push(o);
@@ -622,7 +789,7 @@ function openApt(a){
   selectedAptId = a.id;
   setTab('detail');
   renderArea();
-  analyzeAt(a.pos, a.name);
+  analyzeAt(a.pos, a.name, a.k || matchKapt({ name:a.name, addr:a.jibun, road:a.road }));
 }
 
 /* ---------- 단지 상세 분석 ---------- */
@@ -648,10 +815,14 @@ async function findCat(cat, center){
   items.sort((a,b) => a.d - b.d);
   return { items, error };
 }
-async function analyzeAt(pos, name){
+function renderK(){
+  $('pK').textContent = state.k ? kText(state.k, true) + ' (K-apt)' : '';
+}
+async function analyzeAt(pos, name, k){
   if (tab !== 'detail') setTab('detail');
   const run = ++state.runId;
-  state.pos = pos; state.name = name || ''; state.addr = '';
+  state.pos = pos; state.name = name || ''; state.addr = ''; state.k = k || null; state.jibun = ''; state.road = '';
+  renderK();
   centerMarker.setPosition(kLL(pos)); centerMarker.setMap(map);
   map.panTo(kLL(pos));
   drawRings(pos);
@@ -664,7 +835,9 @@ async function analyzeAt(pos, name){
     if (status === kakao.maps.services.Status.OK && res[0]) {
       const r = res[0];
       state.addr = (r.road_address && r.road_address.address_name) || (r.address && r.address.address_name) || '';
+      state.road = (r.road_address && r.road_address.address_name) || ''; state.jibun = (r.address && r.address.address_name) || '';
       if (!name && r.road_address && r.road_address.building_name) { state.name = r.road_address.building_name; $('pName').textContent = state.name; }
+      if (!state.k) { state.k = matchKapt({ name: state.name, addr: state.jibun, road: state.road }); renderK(); }
     }
     $('pAddr').textContent = state.addr || '주소 정보 없음';
   });
@@ -804,6 +977,7 @@ function summaryText(){
     `[생활편의시설 입지 분석] ${state.name || '선택 지점'}${state.addr ? ' (' + state.addr + ')' : ''}`,
     `분석 기준: 분석 지점에서 가장 가까운 시설까지 직선거리 / 카카오 로컬 데이터 (${today()} 조회)`,
   ];
+  if (state.k) out.push(`- 단지 개요: ${kText(state.k, true)} (출처: 공동주택관리정보시스템 K-apt)`);
   S.rows.forEach(r => {
     const c = r.cat;
     out.push(r.near
@@ -829,6 +1003,7 @@ let saved = LS.get('lm_saved', []);
 $('saveBtn').onclick = () => {
   const S = state.summary; if (!S || !state.pos) return;
   const item = { id: Date.now(), name: state.name || '선택 지점', addr: state.addr, lat: state.pos.lat, lng: state.pos.lng, total: S.total, date: today(),
+    year: kYear(state.k), hh: state.k ? state.k.h : null, dong: state.k ? state.k.d : null,
     cats: Object.fromEntries(S.rows.map(r => [r.cat.id, { d: r.d, name: r.near ? r.near.name : '' }])) };
   saved = saved.filter(s => !(Math.abs(s.lat - item.lat) < 1e-5 && Math.abs(s.lng - item.lng) < 1e-5));
   saved.unshift(item); LS.set('lm_saved', saved); renderCmp(); toast('후보지에 저장했어요');
@@ -837,7 +1012,7 @@ function renderCmp(){
   if (!saved.length) { $('cmpBox').innerHTML = '<p class="muted">저장한 후보지가 여기에 나란히 비교됩니다.</p>'; return; }
   const best = Math.max(...saved.map(s => s.total));
   $('cmpBox').innerHTML = `<table class="cmp"><thead><tr><th>후보지</th><th>총점</th>${CATS.map(c => `<th title="${c.sub}">${c.icon}</th>`).join('')}<th></th></tr></thead><tbody>
-    ${saved.map((s, i) => `<tr><td class="nm" data-i="${i}" title="${esc(s.addr)}">${esc(s.name)}</td><td style="font-weight:700;${s.total === best ? 'color:var(--ok)' : ''}">${s.total}</td>
+    ${saved.map((s, i) => `<tr><td class="nm" data-i="${i}" title="${esc(s.addr)}${s.year ? ' · ' + s.year + '년 준공' : ''}${s.hh ? ' · ' + s.hh.toLocaleString() + '세대' : ''}">${esc(s.name)}</td><td style="font-weight:700;${s.total === best ? 'color:var(--ok)' : ''}">${s.total}</td>
       ${CATS.map(c => { const v = s.cats[c.id]; return `<td title="${esc(v && v.name)}">${v && v.d != null ? fmtD(v.d) : '–'}</td>`; }).join('')}
       <td><button class="del" data-del="${i}" aria-label="삭제">×</button></td></tr>`).join('')}
   </tbody></table><p class="muted" style="margin:6px 0 0">각 칸은 가장 가까운 시설까지 직선거리입니다. 이름을 누르면 그 위치를 다시 분석합니다.</p>`;
@@ -846,8 +1021,8 @@ function renderCmp(){
 }
 $('copyTableBtn').onclick = async () => {
   if (!saved.length) return toast('저장된 후보지가 없어요');
-  const head = ['후보지', '주소', '총점', ...CATS.flatMap(c => [`${c.label} 최근접`, `${c.label} 거리(m)`]), '조회일'];
-  const rows = saved.map(s => [s.name, s.addr || '', s.total, ...CATS.flatMap(c => { const v = s.cats[c.id] || {}; return [v.name || '', v.d != null ? Math.round(v.d) : '']; }), s.date]);
+  const head = ['후보지', '주소', '준공연도', '세대수', '동수', '총점', ...CATS.flatMap(c => [`${c.label} 최근접`, `${c.label} 거리(m)`]), '조회일'];
+  const rows = saved.map(s => [s.name, s.addr || '', s.year || '', s.hh || '', s.dong || '', s.total, ...CATS.flatMap(c => { const v = s.cats[c.id] || {}; return [v.name || '', v.d != null ? Math.round(v.d) : '']; }), s.date]);
   toast(await copyText([head, ...rows].map(r => r.join('\t')).join('\n')) ? '표를 복사했어요. 엑셀에 붙여넣으세요' : '복사하지 못했어요');
 };
 
@@ -877,6 +1052,8 @@ $('resetSet').onclick = () => { LS.del('lm_rules'); CATS = loadCats(); afterRule
 renderSettings();
 renderChips();
 renderCmp();
+bindAptFilters();
+loadKapt();
 boot();
 </script>
 </body>

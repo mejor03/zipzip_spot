@@ -1,0 +1,883 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>생활권 아파트 지도 — 초품아 · 스세권 · 맥세권 · 백세권 · 다세권 · 올세권</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css">
+<style>
+  :root{
+    --bg:#f6f5f2; --panel:#ffffff; --ink:#1b1d21; --ink2:#5b6170; --ink3:#9aa0ab;
+    --line:#e6e4df; --accent:#1f3a5f; --accent-soft:#e8eef6;
+    --ok:#1f7a4d; --ok-soft:#e5f3ec; --mid:#b26a00; --mid-soft:#fbf0de; --no:#8a8f99; --no-soft:#f0f0f2;
+    --r:12px;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;font-family:"Pretendard Variable",Pretendard,-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;color:var(--ink);background:var(--bg);-webkit-font-smoothing:antialiased}
+  button{font:inherit;cursor:pointer}
+  input{font:inherit}
+  .app{display:grid;grid-template-columns:410px 1fr;height:100vh}
+  .side{background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
+  .brand{padding:18px 20px 12px}
+  .brand h1{font-size:18px;margin:0;letter-spacing:-.3px}
+  .brand h1 span{color:var(--ink3);font-weight:500;font-size:13px;margin-left:6px}
+  .linkbtn{background:none;border:0;color:var(--ink3);font-size:12px;padding:0;text-decoration:underline}
+  .search{padding:0 20px 12px;position:relative}
+  .search form{display:flex;gap:6px}
+  .search input{flex:1;height:42px;border:1px solid var(--line);border-radius:10px;padding:0 12px;background:#fbfbfa;outline:none;min-width:0}
+  .search input:focus{border-color:var(--accent);background:#fff}
+  .search button{height:42px;padding:0 14px;border:0;border-radius:10px;background:var(--accent);color:#fff;font-weight:600}
+  .results{position:absolute;left:20px;right:20px;top:48px;background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.12);max-height:340px;overflow:auto;z-index:20;display:none}
+  .results.show{display:block}
+  .results .ri{padding:10px 12px;border-bottom:1px solid #f1f0ec;cursor:pointer}
+  .results .ri:hover{background:#f7f8fa}
+  .results .ri b{display:block;font-size:14px}
+  .results .ri small{color:var(--ink2);font-size:12px}
+  .results .ri .tag{display:inline-block;font-size:10.5px;padding:1px 6px;border-radius:4px;background:var(--accent-soft);color:var(--accent);margin-right:5px;vertical-align:1px}
+  .results .empty{padding:14px;color:var(--ink2);font-size:13px}
+  .tabs{display:flex;gap:4px;background:#f0efeb;border-radius:10px;padding:3px;margin:0 20px 12px}
+  .tab{flex:1;border:0;background:none;height:34px;border-radius:8px;font-weight:600;color:var(--ink2);font-size:13.5px}
+  .tab.on{background:#fff;color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.1)}
+  .scroll{flex:1;overflow:auto;padding:0 20px 24px}
+  .hide{display:none!important}
+  /* find tab */
+  .chips{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+  .chip{border:1.5px solid var(--line);background:#fff;border-radius:10px;padding:9px 10px;text-align:left;display:flex;gap:8px;align-items:center}
+  .chip .ic{font-size:18px}
+  .chip b{font-size:13.5px;display:block}
+  .chip small{font-size:11px;color:var(--ink3)}
+  .chip.on{border-color:var(--c);background:color-mix(in srgb,var(--c) 9%,#fff)}
+  .chip.on b{color:var(--c)}
+  .wide{width:100%;margin-top:10px;height:42px!important;font-size:14px!important}
+  .findinfo{font-size:12.5px;color:var(--ink2);margin:12px 0 8px;line-height:1.5}
+  .findinfo.err{color:#b3261e;background:#fdecea;border-radius:9px;padding:10px 12px}
+  .findinfo b{color:var(--ink)}
+  .apt-item{border:1px solid var(--line);border-radius:11px;padding:10px 12px;margin-bottom:7px;cursor:pointer;background:#fff}
+  .apt-item:hover{border-color:#c9cfd9;background:#fbfcfd}
+  .apt-item.dim{opacity:.55}
+  .ai-top{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+  .ai-top b{font-size:14.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .ai-sc{font-weight:800;font-size:15px;color:var(--accent);flex:none}
+  .ai-sc small{font-weight:500;color:var(--ink3);font-size:11px}
+  .ai-ad{font-size:11.5px;color:var(--ink3);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .ai-b{display:flex;flex-wrap:wrap;gap:4px;margin-top:7px}
+  .ai-b span{font-size:11.5px;padding:2px 7px;border-radius:6px;background:var(--no-soft);color:var(--no);font-variant-numeric:tabular-nums}
+  .ai-b span.on{background:var(--ok-soft);color:var(--ok);font-weight:600}
+  .ai-b span.mid{background:var(--mid-soft);color:var(--mid)}
+  /* detail tab */
+  .place{padding:14px 16px;border:1px solid var(--line);border-radius:var(--r);background:#fcfcfb}
+  .place .nm{font-weight:700;font-size:16px;letter-spacing:-.2px}
+  .place .ad{color:var(--ink2);font-size:12.5px;margin-top:3px}
+  .score{display:flex;align-items:center;gap:14px;margin-top:12px}
+  .ring{--p:0;width:76px;height:76px;border-radius:50%;background:conic-gradient(var(--accent) calc(var(--p)*1%),#e9ebef 0);display:grid;place-items:center;flex:none}
+  .ring>div{width:62px;height:62px;border-radius:50%;background:#fcfcfb;display:grid;place-items:center;text-align:center}
+  .ring b{font-size:22px;line-height:1}
+  .ring small{display:block;font-size:10px;color:var(--ink3)}
+  .grade b{font-size:15px}
+  .grade p{margin:3px 0 0;color:var(--ink2);font-size:12.5px;line-height:1.45}
+  .badges{display:flex;flex-wrap:wrap;gap:5px;margin-top:10px}
+  .bdg{font-size:12px;font-weight:600;padding:4px 9px;border-radius:999px;background:var(--no-soft);color:var(--no)}
+  .bdg.on{background:var(--ok-soft);color:var(--ok)}
+  .bdg.mid{background:var(--mid-soft);color:var(--mid)}
+  .actions{display:flex;gap:6px;margin-top:12px}
+  .btn{flex:1;height:36px;border-radius:9px;border:1px solid var(--line);background:#fff;font-size:13px;font-weight:600;color:var(--ink)}
+  .btn:hover{border-color:#cfd3da}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  .btn:disabled{opacity:.5;cursor:default}
+  .sec-title{font-size:12px;font-weight:700;color:var(--ink3);letter-spacing:.4px;margin:20px 0 8px;display:flex;justify-content:space-between;align-items:center;gap:8px}
+  .cat{border:1px solid var(--line);border-radius:var(--r);margin-bottom:8px;overflow:hidden;background:#fff}
+  .cat-h{display:grid;grid-template-columns:36px 1fr auto;gap:10px;align-items:center;padding:11px 12px;cursor:pointer}
+  .cat-ic{width:36px;height:36px;border-radius:10px;display:grid;place-items:center;font-size:18px}
+  .cat-t{min-width:0}
+  .cat-t b{font-size:14.5px}
+  .cat-t span{font-size:12px;color:var(--ink3);margin-left:4px}
+  .cat-t .near{font-size:12.5px;color:var(--ink2);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .cat-r{text-align:right}
+  .cat-r .pts{font-weight:700;font-size:14px}
+  .cat-r .pts small{color:var(--ink3);font-weight:500}
+  .st{display:inline-block;font-size:11px;font-weight:700;padding:2px 7px;border-radius:5px;margin-top:3px}
+  .st.on{background:var(--ok-soft);color:var(--ok)} .st.mid{background:var(--mid-soft);color:var(--mid)} .st.no{background:var(--no-soft);color:var(--no)}
+  .cat-b{display:none;border-top:1px solid #f1f0ec;padding:6px 12px 10px;background:#fcfcfb}
+  .cat.open .cat-b{display:block}
+  .li{display:flex;justify-content:space-between;gap:8px;padding:6px 0;font-size:13px;border-bottom:1px dashed #ecebe6;cursor:pointer}
+  .li:last-child{border-bottom:0}
+  .li:hover .ln{color:var(--accent);text-decoration:underline}
+  .li .ln{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .li .ld{color:var(--ink2);white-space:nowrap;font-variant-numeric:tabular-nums}
+  .cat-meta{font-size:11.5px;color:var(--ink3);margin-top:6px}
+  table.cmp{width:100%;border-collapse:collapse;font-size:12.5px;font-variant-numeric:tabular-nums}
+  table.cmp th,table.cmp td{padding:7px 4px;border-bottom:1px solid #f0efea;text-align:right}
+  table.cmp th{color:var(--ink3);font-weight:600;font-size:11.5px}
+  table.cmp td:first-child,table.cmp th:first-child{text-align:left}
+  table.cmp td.nm{max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;font-weight:600}
+  table.cmp td.nm:hover{color:var(--accent);text-decoration:underline}
+  table.cmp .del{border:0;background:none;color:var(--ink3);padding:0 2px}
+  .muted{color:var(--ink3);font-size:12.5px;line-height:1.5;font-weight:500}
+  details.set{border:1px solid var(--line);border-radius:var(--r);padding:10px 12px;background:#fff}
+  details.set summary{cursor:pointer;font-size:13px;font-weight:600}
+  .set-grid{display:grid;grid-template-columns:1fr 64px 64px 52px;gap:6px;align-items:center;margin-top:10px;font-size:12.5px}
+  .set-grid .h{color:var(--ink3);font-size:11px;font-weight:600}
+  .set-grid input{width:100%;height:30px;border:1px solid var(--line);border-radius:7px;padding:0 6px;text-align:right}
+  .foot{padding:10px 20px;border-top:1px solid var(--line);font-size:11px;color:var(--ink3);line-height:1.5}
+  /* map */
+  .mapwrap{position:relative;min-height:0}
+  #map{position:absolute;inset:0;overflow:hidden}
+  .legend{position:absolute;right:14px;top:14px;background:#fff;border-radius:10px;box-shadow:0 4px 16px rgba(0,0,0,.12);padding:8px 10px;z-index:5;font-size:12px}
+  .legend div{display:flex;align-items:center;gap:6px;padding:2px 0}
+  .legend i{width:10px;height:10px;border-radius:50%;display:inline-block}
+  .mapbtns{position:absolute;left:50%;top:14px;transform:translateX(-50%);z-index:5}
+  .mapbtns button{background:#1b1d21;color:#fff;border:0;border-radius:999px;box-shadow:0 4px 16px rgba(0,0,0,.2);padding:9px 16px;font-size:13px;font-weight:600}
+  .loading{position:absolute;left:50%;bottom:28px;transform:translateX(-50%);background:#fff;padding:8px 14px;border-radius:999px;box-shadow:0 4px 16px rgba(0,0,0,.14);font-size:12.5px;z-index:6;display:none}
+  .loading.show{display:block}
+  .mk{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;font-size:14px;color:#fff;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.3);cursor:pointer;transition:transform .12s}
+  .mk:hover{transform:scale(1.15)}
+  .mk.near{width:34px;height:34px;font-size:17px;box-shadow:0 0 0 3px rgba(255,255,255,.7),0 3px 10px rgba(0,0,0,.35)}
+  .mk.far{opacity:.55}
+  .mk.sm{width:22px;height:22px;font-size:11px;border-width:1.5px;opacity:.85}
+  .apt{display:flex;align-items:center;gap:5px;background:var(--accent);color:#fff;font-size:12px;font-weight:600;padding:4px 9px 4px 4px;border-radius:999px;box-shadow:0 2px 8px rgba(0,0,0,.28);white-space:nowrap;cursor:pointer;border:2px solid #fff}
+  .apt b{background:#fff;color:var(--accent);border-radius:999px;padding:1px 6px;font-size:11.5px}
+  .apt:hover{transform:scale(1.06)}
+  .apt.sel{background:#d4382c}.apt.sel b{color:#d4382c}
+  .aptdot{width:11px;height:11px;border-radius:50%;background:#9aa0ab;border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.3);cursor:pointer}
+  .ringlbl{font-size:11px;font-weight:700;color:#334;background:rgba(255,255,255,.85);padding:1px 5px;border-radius:4px}
+  .pop{background:#fff;border-radius:10px;box-shadow:0 6px 22px rgba(0,0,0,.2);padding:10px 12px;min-width:200px;max-width:260px;font-size:12.5px;position:relative;margin-bottom:44px}
+  .pop b{font-size:13.5px;display:block;padding-right:16px}
+  .pop .x{position:absolute;right:6px;top:4px;border:0;background:none;font-size:15px;color:var(--ink3)}
+  .pop .m{color:var(--ink2);margin-top:3px;line-height:1.45}
+  .pop a{color:var(--accent);font-weight:600;text-decoration:none;display:inline-block;margin-top:5px}
+  .modal{position:fixed;inset:0;background:rgba(20,22,26,.55);display:none;place-items:center;z-index:100;padding:20px}
+  .modal.show{display:grid}
+  .card{background:#fff;border-radius:16px;max-width:520px;width:100%;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,.3)}
+  .card h2{margin:0 0 6px;font-size:19px}
+  .card p{color:var(--ink2);font-size:13.5px;line-height:1.6;margin:6px 0}
+  .card ol{font-size:13px;color:var(--ink2);line-height:1.7;padding-left:18px;margin:10px 0}
+  .card code{background:#f2f3f5;padding:1px 5px;border-radius:4px;font-size:12px}
+  .card input{width:100%;height:44px;border:1px solid var(--line);border-radius:10px;padding:0 12px;margin-top:8px}
+  .card .row{display:flex;gap:8px;margin-top:12px}
+  .err{color:#c0392b;font-size:12.5px;margin-top:8px;min-height:1em}
+  .toast{position:fixed;left:50%;bottom:30px;transform:translateX(-50%) translateY(20px);background:#1b1d21;color:#fff;padding:9px 16px;border-radius:999px;font-size:13px;opacity:0;transition:.2s;z-index:200;pointer-events:none;max-width:90vw;text-align:center}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  @media (max-width:860px){
+    .app{grid-template-columns:1fr;grid-template-rows:52vh auto;height:auto}
+    .mapwrap{order:-1;height:52vh}
+    .side{border-right:0;border-top:1px solid var(--line)}
+    .scroll{overflow:visible}
+    .legend{display:none}
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="side">
+    <div class="brand"><h1>생활권 아파트 지도<span>초품아 · 스세권 등 6개 생활권</span></h1></div>
+    <div class="search">
+      <form id="searchForm" autocomplete="off">
+        <input id="q" placeholder="동네·역·아파트명 검색 (예: 잠실동, 목동역)">
+        <button type="submit">검색</button>
+      </form>
+      <div class="results" id="results"></div>
+    </div>
+    <div class="tabs">
+      <button class="tab on" data-tab="find">아파트 찾기</button>
+      <button class="tab" data-tab="detail">단지 상세 분석</button>
+    </div>
+    <div class="scroll">
+      <!-- 아파트 찾기 -->
+      <section id="tabFind">
+        <div class="sec-title" style="margin-top:2px">조건 선택 <span class="muted">고른 조건을 모두 만족하는 단지만 표시</span></div>
+        <div class="chips" id="chips"></div>
+        <button class="btn primary wide" id="findBtn">지금 보이는 지역에서 아파트 찾기</button>
+        <div class="findinfo" id="findInfo">지도를 원하는 동네로 옮긴 뒤 버튼을 누르세요.</div>
+        <div id="aptList"></div>
+      </section>
+
+      <!-- 단지 상세 분석 -->
+      <section id="tabDetail" class="hide">
+        <div class="place">
+          <div class="nm" id="pName">분석할 단지를 고르세요</div>
+          <div class="ad" id="pAddr">'아파트 찾기' 목록에서 단지를 누르거나, 지도를 클릭하면 그 지점을 분석합니다.</div>
+          <div class="score">
+            <div class="ring" id="ring" style="--p:0"><div><div><b id="total">–</b><small>/ 100</small></div></div></div>
+            <div class="grade"><b id="gradeT">–</b><p id="gradeD">주변 초등학교, 스타벅스, 맥도날드, 백화점·대형마트, 다이소, 올리브영까지의 직선거리로 점수를 매깁니다.</p></div>
+          </div>
+          <div class="badges" id="badges"></div>
+          <div class="actions">
+            <button class="btn primary" id="saveBtn" disabled>후보지 저장</button>
+            <button class="btn" id="copyBtn" disabled>요약 복사</button>
+          </div>
+        </div>
+        <div class="sec-title">항목별 분석 <span class="muted">카드를 누르면 가까운 곳 목록</span></div>
+        <div id="cats"></div>
+        <div class="sec-title">후보지 비교 <button class="linkbtn" id="copyTableBtn">엑셀용 표 복사</button></div>
+        <div id="cmpBox"></div>
+      </section>
+
+      <div class="sec-title">평가 기준</div>
+      <details class="set">
+        <summary>거리 기준 · 배점 조정</summary>
+        <div class="set-grid" id="setGrid"></div>
+        <p class="muted" style="margin:10px 0 0">'충족' 거리 이내면 만점이고 그 조건을 만족한 것으로 봅니다. '한계' 거리에서 0점이 되도록 직선으로 줄어듭니다. 도보 시간은 분당 67m로 계산합니다.</p>
+        <div class="actions"><button class="btn primary" id="applySet">적용</button><button class="btn" id="resetSet">기본값</button></div>
+      </details>
+    </div>
+    <div class="foot">장소 데이터: 카카오 로컬 · 직선거리 기준이며 실제 보행경로, 큰길 횡단 여부, 배정 초등학교(학구)는 별도 확인이 필요합니다. <button class="linkbtn" id="keyBtn">API 키 변경</button></div>
+  </aside>
+
+  <main class="mapwrap">
+    <div id="map"></div>
+    <div class="legend" id="legend"></div>
+    <div class="mapbtns"><button id="mapBtn">이 지역에서 다시 찾기</button></div>
+    <div class="loading" id="loading">찾는 중…</div>
+  </main>
+</div>
+
+<div class="modal" id="keyModal">
+  <div class="card">
+    <h2>카카오맵 JavaScript 키 입력</h2>
+    <p>카카오 디벨로퍼스 [앱] &gt; [플랫폼 키] &gt; [JavaScript 키]의 키 값을 넣어 주세요. 키는 이 브라우저에만 저장됩니다.</p>
+    <ol>
+      <li>같은 화면의 <b>JavaScript SDK 도메인</b>에 이 페이지 주소를 등록 (예: <code>http://localhost:8080</code>, 경로 없이 도메인만)</li>
+      <li>카카오맵 사용 설정이 켜져 있는지 확인</li>
+    </ol>
+    <p class="muted">현재 주소: <code id="curOrigin"></code></p>
+    <input id="keyInput" placeholder="JavaScript 키 (32자리)">
+    <div class="err" id="keyErr"></div>
+    <div class="row"><button class="btn primary" id="keySave">지도 불러오기</button></div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* =========================================================
+   설정 — APP_KEY에 JavaScript 키를 넣으면 입력창 없이 바로 시작합니다.
+   ========================================================= */
+const APP_KEY = 'f75b8f9f7f31354891c89d7fccbb1d38';
+const DEFAULT_CENTER = { lat: 37.5115, lng: 127.0860 };   // 처음 열 때 위치 (잠실)
+const WALK_M_PER_MIN = 67;
+const MAX_MARKERS_PER_CAT = 15;
+const MAX_FIND_LEVEL = 6;          // 이보다 넓게 축소하면 아파트 찾기를 막음 (호출량 보호)
+const LABEL_LIMIT = 40;            // 지도에 이름표로 보여줄 최대 단지 수
+
+const BIG_MART = /(이마트|홈플러스|롯데마트|코스트코|트레이더스|하나로마트|메가마트|빅마켓)/;
+const SSM = /(에브리데이|익스프레스|노브랜드|슈퍼|편의점|주유소|주차장|정육|문화센터)/;
+const NOISE = /(주차장|주차타워|정문|후문|입구|출구|ATM|매표소|고객센터|사무실|물류|배송센터)/;
+const APT_NOISE = /(상가|관리사무소|관리동|경로당|노인정|어린이집|유치원|놀이터|주차장|정문|후문|입구|커뮤니티|피트니스|독서실|분양|모델하우스|홍보관|견본주택|공인중개|부동산|\d+\s*동$)/;
+
+const DEFAULT_CATS = [
+  { id:'school', label:'초품아', sub:'초등학교', icon:'🏫', color:'#2f62c9', best:300, max:1000, weight:25,
+    sources:[{type:'keyword', q:'초등학교'}],
+    filter:p => /초등학교/.test(p.category_name) && /초등학교$/.test(p.place_name.trim()) && !NOISE.test(p.place_name) },
+  { id:'starbucks', label:'스세권', sub:'스타벅스', icon:'☕', color:'#0f7b52', best:300, max:1000, weight:15,
+    sources:[{type:'keyword', q:'스타벅스'}],
+    filter:p => /^스타벅스/.test(p.place_name.trim()) && !NOISE.test(p.place_name) },
+  { id:'mcd', label:'맥세권', sub:'맥도날드', icon:'🍔', color:'#d4382c', best:500, max:1500, weight:15,
+    sources:[{type:'keyword', q:'맥도날드'}],
+    filter:p => /^맥도날드/.test(p.place_name.trim()) && !NOISE.test(p.place_name) },
+  { id:'dept', label:'백세권', sub:'백화점·대형마트', icon:'🏬', color:'#7a4cc9', best:1000, max:3000, weight:20,
+    sources:[{type:'keyword', q:'백화점', tag:'백화점'}, {type:'category', code:'MT1', tag:'대형마트'}],
+    filter:(p, tag) => {
+      if (NOISE.test(p.place_name)) return false;
+      if (tag === '백화점') return /백화점/.test(p.place_name) && /백화점/.test(p.category_name);
+      return BIG_MART.test(p.place_name) && !SSM.test(p.place_name);
+    } },
+  { id:'daiso', label:'다세권', sub:'다이소', icon:'🧺', color:'#e07b00', best:500, max:1500, weight:15,
+    sources:[{type:'keyword', q:'다이소'}],
+    filter:p => /^(아성)?\s*다이소/.test(p.place_name.trim()) && !NOISE.test(p.place_name) },
+  { id:'oliveyoung', label:'올세권', sub:'올리브영', icon:'💄', color:'#c2185b', best:500, max:1500, weight:10,
+    sources:[{type:'keyword', q:'올리브영'}],
+    filter:p => /^(CJ)?\s*올리브영/.test(p.place_name.trim()) && !NOISE.test(p.place_name) },
+];
+
+/* ---------- 저장소 ---------- */
+const LS = {
+  get(k, d){ try{ const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); }catch(e){ return d; } },
+  set(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} },
+  del(k){ try{ localStorage.removeItem(k); }catch(e){} }
+};
+let CATS = loadCats();
+function loadCats(){
+  const saved = LS.get('lm_rules', null);
+  return DEFAULT_CATS.map(c => {
+    const s = saved && saved[c.id];
+    return s ? { ...c, best:+s.best, max:+s.max, weight:+s.weight } : { ...c };
+  });
+}
+
+/* ---------- 유틸 ---------- */
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+function haversine(a, b){
+  const R = 6371000, toR = x => x * Math.PI / 180;
+  const dLat = toR(b.lat - a.lat), dLng = toR(b.lng - a.lng);
+  const h = Math.sin(dLat/2)**2 + Math.cos(toR(a.lat))*Math.cos(toR(b.lat))*Math.sin(dLng/2)**2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+const fmtD = d => d == null ? '–' : (d < 1000 ? Math.round(d) + 'm' : (d % 1000 === 0 ? d/1000 + 'km' : (d/1000).toFixed(2) + 'km'));
+const walk = d => Math.max(1, Math.round(d / WALK_M_PER_MIN));
+function toast(msg, ms){ const t = $('toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toast._t); toast._t = setTimeout(()=>t.classList.remove('show'), ms || 2000); }
+function today(){ const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); }
+function loading(on, text){ const l = $('loading'); if (text) l.textContent = text; l.classList.toggle('show', !!on); }
+
+function scoreOf(cat, d){
+  if (d == null || d >= cat.max) return 0;
+  if (d <= cat.best) return cat.weight;
+  return cat.weight * (cat.max - d) / (cat.max - cat.best);
+}
+function statusOf(cat, d){
+  if (d != null && d <= cat.best) return { cls:'on', text:'충족' };
+  if (d != null && d < cat.max) return { cls:'mid', text:'근접' };
+  return { cls:'no', text:'미해당' };
+}
+const weightSum = () => CATS.reduce((s,c) => s + c.weight, 0) || 1;
+function gradeOf(total){
+  if (total >= 80) return ['생활편의 우수', '주요 생활권 요소를 대부분 도보권에서 누릴 수 있는 입지입니다.'];
+  if (total >= 60) return ['양호', '주요 시설 대부분이 가까운 편이며 일부 항목만 거리가 있습니다.'];
+  if (total >= 40) return ['보통', '일부 시설은 도보권 밖으로 차량·대중교통 이용이 필요합니다.'];
+  return ['취약', '생활편의시설 접근성이 낮은 편입니다. 개발계획 등 보완 요인을 함께 보세요.'];
+}
+
+/* ---------- 카카오 SDK 로드 ---------- */
+let map, places, geocoder;
+function getKey(){ return APP_KEY || LS.get('lm_kakao_key', ''); }
+function showKeyModal(err){
+  const preview = location.protocol !== 'file:' && (location.origin === 'null' || !location.origin);
+  $('curOrigin').textContent = location.protocol === 'file:' ? 'file:// (파일을 직접 연 상태)' : preview ? '미리보기 창 (여기서는 동작하지 않음)' : location.origin;
+  $('keyInput').value = getKey();
+  $('keyErr').textContent = preview
+    ? '지금은 미리보기 창에서 열려 있어서 카카오 지도를 불러올 수 없어요. 파일을 내려받아 크롬에서 열어 주세요.'
+    : (err || '');
+  $('keyModal').classList.add('show');
+}
+function loadSdk(key){
+  return new Promise((resolve, reject) => {
+    if (window.kakao && window.kakao.maps && window.kakao.maps.services) return resolve();
+    const s = document.createElement('script');
+    s.src = 'https://dapi.kakao.com/v2/maps/sdk.js?appkey=' + encodeURIComponent(key) + '&libraries=services&autoload=false';
+    const timer = setTimeout(() => reject(new Error('timeout')), 8000);
+    s.onload = () => {
+      if (!window.kakao || !window.kakao.maps) { clearTimeout(timer); return reject(new Error('sdk')); }
+      window.kakao.maps.load(() => { clearTimeout(timer); window.kakao.maps.services ? resolve() : reject(new Error('services')); });
+    };
+    s.onerror = () => { clearTimeout(timer); reject(new Error('network')); };
+    document.head.appendChild(s);
+  });
+}
+async function boot(){
+  const key = getKey();
+  if (!key) return showKeyModal();
+  try { await loadSdk(key); $('keyModal').classList.remove('show'); initMap(); }
+  catch(e) { showKeyModal('지도를 불러오지 못했습니다. 키가 맞는지, 이 주소가 JavaScript SDK 도메인에 등록됐는지, 카카오맵 사용 설정이 켜져 있는지 확인해 주세요.'); }
+}
+$('keySave').onclick = () => {
+  const k = $('keyInput').value.trim();
+  if (!k) { $('keyErr').textContent = '키를 입력해 주세요.'; return; }
+  LS.set('lm_kakao_key', k);
+  if (window.kakao && window.kakao.maps) { location.reload(); return; }
+  $('keyErr').textContent = '불러오는 중…';
+  boot();
+};
+$('keyBtn').onclick = () => showKeyModal();
+
+/* ---------- 지도 ---------- */
+const toLL = ll => ({ lat: ll.getLat(), lng: ll.getLng() });
+const kLL = p => new kakao.maps.LatLng(p.lat, p.lng);
+let tab = 'find';
+let centerMarker, popup, rings = [], ringLabels = [], lines = [], overlays = {};
+let areaFacOverlays = [], aptOverlays = [];
+let state = { pos:null, name:'', addr:'', results:{}, runId:0, summary:null };
+let area = null, findRun = 0, selectedAptId = null;
+let filters = new Set(LS.get('lm_filters', []));
+
+function initMap(){
+  const K = kakao.maps;
+  const last = LS.get('lm_view', null);
+  const c = last || DEFAULT_CENTER;
+  map = new K.Map($('map'), { center: new K.LatLng(c.lat, c.lng), level: last && last.level ? last.level : 4 });
+  map.addControl(new K.ZoomControl(), K.ControlPosition.LEFT);
+  places = new K.services.Places();
+  geocoder = new K.services.Geocoder();
+  popup = new K.CustomOverlay({ yAnchor:1, zIndex:60, clickable:true });
+  centerMarker = new K.Marker({ position: map.getCenter(), draggable:true, zIndex:40 });
+  K.event.addListener(centerMarker, 'dragend', () => analyzeAt(toLL(centerMarker.getPosition()), null));
+  K.event.addListener(map, 'click', e => {
+    popup.setMap(null);
+    if (tab === 'detail') analyzeAt(toLL(e.latLng), null);
+  });
+  K.event.addListener(map, 'idle', () => {
+    const cc = toLL(map.getCenter());
+    LS.set('lm_view', { lat:cc.lat, lng:cc.lng, level: map.getLevel() });
+  });
+  renderLegend();
+  findApartments();
+}
+function renderLegend(){
+  $('legend').innerHTML = `<div><span class="apt" style="padding:1px 7px 1px 2px;font-size:10px;border-width:1px;box-shadow:none"><b style="font-size:10px">점수</b>단지</span>&nbsp;조건 만족 아파트</div>` +
+    CATS.map(c => `<div><i style="background:${c.color}"></i>${c.icon} ${c.label} <span style="color:#9aa0ab">(${c.sub})</span></div>`).join('');
+}
+
+/* ---------- 탭 ---------- */
+function setTab(t){
+  tab = t;
+  document.querySelectorAll('.tab').forEach(b => b.classList.toggle('on', b.dataset.tab === t));
+  $('tabFind').classList.toggle('hide', t !== 'find');
+  $('tabDetail').classList.toggle('hide', t !== 'detail');
+  $('mapBtn').textContent = t === 'find' ? '이 지역에서 다시 찾기' : '지도 중심 분석';
+  if (!map) return;
+  popup.setMap(null);
+  setDetailLayer(t === 'detail');
+  areaFacOverlays.forEach(o => o.setMap(t === 'find' ? map : null));
+}
+document.querySelectorAll('.tab').forEach(b => b.onclick = () => setTab(b.dataset.tab));
+$('mapBtn').onclick = () => { if (!map) return; tab === 'find' ? findApartments() : analyzeAt(toLL(map.getCenter()), null); };
+$('findBtn').onclick = () => findApartments();
+
+/* ---------- 카카오 로컬 검색 ---------- */
+// 한 번의 검색(최대 3페이지 × 15건 = 45건)
+function kakaoSearch(src, opts){
+  return new Promise(resolve => {
+    const out = [], S = kakao.maps.services;
+    let done = false;
+    const finish = (err, status) => { if (!done) { done = true; resolve({ items: out, error: err, status }); } };
+    const timer = setTimeout(() => finish(true, 'TIMEOUT'), 10000);
+    const cb = (data, status, pg) => {
+      if (status === S.Status.OK) {
+        out.push(...data);
+        if (pg && pg.hasNextPage && pg.current < 3) { pg.nextPage(); return; }
+        clearTimeout(timer); finish(false, status);
+      } else { clearTimeout(timer); finish(status === S.Status.ERROR, status); }
+    };
+    try {
+      if (src.type === 'category') places.categorySearch(src.code, cb, opts);
+      else places.keywordSearch(src.q, cb, opts);
+    } catch(e) { clearTimeout(timer); finish(true, 'EXCEPTION'); }
+  });
+}
+// 영역 검색: 결과가 45건으로 꽉 차면 4등분해서 다시 검색 (최대 2단계)
+async function searchArea(src, sw, ne, depth){
+  const r = await kakaoSearch(src, { bounds: new kakao.maps.LatLngBounds(kLL(sw), kLL(ne)) });
+  if (r.items.length >= 45 && depth < 2) {
+    const mid = { lat:(sw.lat+ne.lat)/2, lng:(sw.lng+ne.lng)/2 };
+    const quads = [[sw, mid], [{lat:sw.lat, lng:mid.lng}, {lat:mid.lat, lng:ne.lng}], [{lat:mid.lat, lng:sw.lng}, {lat:ne.lat, lng:mid.lng}], [mid, ne]];
+    const subs = await Promise.all(quads.map(q => searchArea(src, q[0], q[1], depth + 1)));
+    return { items: r.items.concat(...subs.map(s => s.items)), error: r.error || subs.some(s => s.error) };
+  }
+  return r;
+}
+function padBounds(sw, ne, m){
+  const dLat = m / 111320, dLng = m / (111320 * Math.cos(((sw.lat + ne.lat) / 2) * Math.PI / 180));
+  return [{ lat: sw.lat - dLat, lng: sw.lng - dLng }, { lat: ne.lat + dLat, lng: ne.lng + dLng }];
+}
+function toFacility(p, cat, tag, from){
+  const pos = { lat:+p.y, lng:+p.x };
+  return { id:p.id, name:p.place_name, pos, d: from ? haversine(from, pos) : null,
+    addr:p.road_address_name || p.address_name, url:p.place_url, phone:p.phone, tag: tag || cat.sub };
+}
+
+/* ---------- 아파트 찾기 ---------- */
+function renderChips(){
+  $('chips').innerHTML = CATS.map(c => `<button class="chip ${filters.has(c.id) ? 'on' : ''}" style="--c:${c.color}" data-id="${c.id}">
+    <span class="ic">${c.icon}</span><span><b>${c.label}</b><small>${c.id === 'dept' ? '백화점·마트' : c.sub} ${fmtD(c.best)} 이내</small></span></button>`).join('');
+  document.querySelectorAll('.chip').forEach(b => b.onclick = () => {
+    filters.has(b.dataset.id) ? filters.delete(b.dataset.id) : filters.add(b.dataset.id);
+    LS.set('lm_filters', [...filters]); renderChips();
+    if (area) renderArea();
+  });
+}
+
+async function findApartments(){
+  if (!map) return;
+  if (tab !== 'find') setTab('find');
+  const info = $('findInfo');
+  if (map.getLevel() > MAX_FIND_LEVEL) {
+    info.className = 'findinfo'; info.innerHTML = '지도가 너무 넓게 보이고 있어요. <b>구·동 단위까지 확대</b>한 뒤 다시 찾아 주세요.';
+    toast('지도를 조금 더 확대해 주세요'); return;
+  }
+  const run = ++findRun;
+  const b = map.getBounds();
+  const sw = toLL(b.getSouthWest()), ne = toLL(b.getNorthEast());
+  loading(true, '아파트와 주변 시설을 찾는 중…');
+  info.className = 'findinfo'; info.textContent = '찾는 중…';
+
+  const [aptR, ...facR] = await Promise.all([
+    searchArea({ type:'keyword', q:'아파트' }, sw, ne, 0),
+    ...CATS.map(async c => {
+      const [psw, pne] = padBounds(sw, ne, Math.min(c.max, 3000));
+      const seen = new Set(), items = []; let error = false;
+      for (const src of c.sources) {
+        const r = await searchArea(src, psw, pne, 0);
+        error = error || r.error;
+        for (const p of r.items) if (!seen.has(p.id) && c.filter(p, src.tag)) { seen.add(p.id); items.push(toFacility(p, c, src.tag)); }
+      }
+      return { items, error };
+    })
+  ]);
+  if (run !== findRun) return;
+  loading(false);
+
+  const seen = new Set(), apts = [];
+  for (const p of aptR.items) {
+    if (seen.has(p.id)) continue; seen.add(p.id);
+    if (!/아파트\s*$/.test(p.category_name || '') || APT_NOISE.test(p.place_name.trim())) continue;
+    apts.push({ id:p.id, name:p.place_name, pos:{ lat:+p.y, lng:+p.x }, addr:p.road_address_name || p.address_name });
+  }
+  const fac = {};
+  CATS.forEach((c, i) => fac[c.id] = facR[i].items);
+  const anyErr = aptR.error || facR.some(r => r.error);
+
+  if (anyErr && !aptR.items.length && facR.every(r => !r.items.length)) {
+    area = null; clearArea();
+    info.className = 'findinfo err';
+    info.innerHTML = '<b>카카오 장소 검색이 응답하지 않았어요.</b><br>지도는 떴는데 검색만 막힌 경우, 파일을 더블클릭으로 연 상태(file://)라서 카카오가 도메인을 확인하지 못한 경우가 많습니다. 명령 프롬프트에서 <code>python -m http.server 8080</code>으로 띄운 뒤 <code>http://localhost:8080/living-map.html</code>로 열어 보세요. (JavaScript SDK 도메인에 <code>http://localhost:8080</code> 등록 필요)';
+    $('aptList').innerHTML = '';
+    return;
+  }
+  area = { apts, fac, error: anyErr };
+  computeArea();
+  renderArea();
+  if (anyErr) toast('일부 검색이 실패해 결과가 덜 나왔을 수 있어요');
+}
+
+function computeArea(){
+  if (!area) return;
+  const W = weightSum();
+  area.apts.forEach(a => {
+    let total = 0;
+    a.cats = {};
+    CATS.forEach(c => {
+      let best = null;
+      for (const f of area.fac[c.id]) { const d = haversine(a.pos, f.pos); if (!best || d < best.d) best = { d, name:f.name }; }
+      const d = best ? best.d : null;
+      a.cats[c.id] = { d, name: best ? best.name : '', st: statusOf(c, d) };
+      total += scoreOf(c, d);
+    });
+    a.total = Math.round(total / W * 100);
+  });
+  area.apts.sort((x, y) => y.total - x.total);
+}
+
+function clearArea(){
+  aptOverlays.forEach(o => o.setMap(null)); aptOverlays = [];
+  areaFacOverlays.forEach(o => o.setMap(null)); areaFacOverlays = [];
+}
+
+function renderArea(){
+  clearArea();
+  if (!area) return;
+  const pass = a => [...filters].every(id => a.cats[id] && a.cats[id].st.cls === 'on');
+  const matched = area.apts.filter(pass);
+  const rest = area.apts.filter(a => !pass(a));
+  const fl = [...filters].map(id => CATS.find(c => c.id === id).label).join(' + ');
+
+  const info = $('findInfo');
+  info.className = 'findinfo';
+  if (!area.apts.length) {
+    info.innerHTML = '이 지역에서 아파트를 찾지 못했어요. 지도를 아파트가 많은 동네로 옮겨 보세요.';
+  } else {
+    info.innerHTML = filters.size
+      ? `이 지역 아파트 <b>${area.apts.length}곳</b> 중 <b>${fl}</b> 조건을 모두 만족하는 곳 <b style="color:var(--ok)">${matched.length}곳</b>`
+      : `이 지역 아파트 <b>${area.apts.length}곳</b>을 생활권 점수 순으로 보여드려요. 위에서 조건을 고르면 걸러집니다.`;
+  }
+
+  const item = (a, dim) => `<div class="apt-item ${dim ? 'dim' : ''}" data-id="${esc(a.id)}">
+    <div class="ai-top"><b>${esc(a.name)}</b><span class="ai-sc">${a.total}<small> 점</small></span></div>
+    <div class="ai-ad">${esc(a.addr || '')}</div>
+    <div class="ai-b">${CATS.map(c => { const v = a.cats[c.id]; return `<span class="${v.st.cls === 'no' ? '' : v.st.cls}" title="${esc(v.name)}">${c.icon} ${v.d == null ? '없음' : fmtD(v.d)}</span>`; }).join('')}</div>
+  </div>`;
+  let html = matched.slice(0, 150).map(a => item(a, false)).join('');
+  if (filters.size && rest.length) html += `<div class="sec-title" style="margin-top:14px">조건 미충족 ${rest.length}곳</div>` + rest.slice(0, 60).map(a => item(a, true)).join('');
+  $('aptList').innerHTML = html;
+  document.querySelectorAll('.apt-item').forEach(el => el.onclick = () => openApt(area.apts.find(a => a.id === el.dataset.id)));
+
+  // 지도: 조건 만족 단지는 점수 이름표, 나머지는 회색 점
+  matched.forEach((a, i) => {
+    const el = document.createElement('div');
+    if (i < LABEL_LIMIT) { el.className = 'apt' + (a.id === selectedAptId ? ' sel' : ''); el.innerHTML = `<b>${a.total}</b>${esc(shortName(a.name))}`; }
+    else el.className = 'aptdot';
+    el.style.background = i < LABEL_LIMIT ? '' : 'var(--accent)';
+    el.title = `${a.name} · ${a.total}점`;
+    el.onclick = ev => { ev.stopPropagation(); openApt(a); };
+    const o = new kakao.maps.CustomOverlay({ position:kLL(a.pos), content:el, xAnchor:.5, yAnchor:i < LABEL_LIMIT ? 1.1 : .5, zIndex: 35 - Math.min(i, 30) + (a.id === selectedAptId ? 20 : 0), clickable:true });
+    o.setMap(map); aptOverlays.push(o);
+  });
+  rest.forEach(a => {
+    const el = document.createElement('div'); el.className = 'aptdot'; el.title = `${a.name} · ${a.total}점 (조건 미충족)`;
+    el.onclick = ev => { ev.stopPropagation(); openApt(a); };
+    const o = new kakao.maps.CustomOverlay({ position:kLL(a.pos), content:el, xAnchor:.5, yAnchor:.5, zIndex:4, clickable:true });
+    o.setMap(map); aptOverlays.push(o);
+  });
+  // 고른 조건의 시설만 작게 표시 (조건이 없으면 전체)
+  const showCats = filters.size ? CATS.filter(c => filters.has(c.id)) : CATS;
+  showCats.forEach(c => area.fac[c.id].forEach(f => {
+    const el = document.createElement('div'); el.className = 'mk sm'; el.style.background = c.color; el.textContent = c.icon; el.title = f.name;
+    el.onclick = ev => { ev.stopPropagation(); openPopup(c, f); };
+    const o = new kakao.maps.CustomOverlay({ position:kLL(f.pos), content:el, xAnchor:.5, yAnchor:.5, zIndex:6, clickable:true });
+    if (tab === 'find') o.setMap(map);
+    areaFacOverlays.push(o);
+  }));
+}
+const shortName = n => n.length > 12 ? n.slice(0, 11) + '…' : n;
+
+function openApt(a){
+  if (!a) return;
+  selectedAptId = a.id;
+  setTab('detail');
+  renderArea();
+  analyzeAt(a.pos, a.name);
+}
+
+/* ---------- 단지 상세 분석 ---------- */
+function setDetailLayer(show){
+  const m = show ? map : null;
+  if (!state.pos) { centerMarker.setMap(null); return; }
+  centerMarker.setMap(m);
+  rings.forEach(r => r.setMap(m)); ringLabels.forEach(r => r.setMap(m)); lines.forEach(l => l.setMap(m));
+  Object.values(overlays).flat().forEach(o => o.setMap(m));
+}
+async function findCat(cat, center){
+  const radius = Math.min(20000, Math.max(2000, cat.max * 1.5));
+  const seen = new Set(), items = [];
+  let error = false;
+  for (const src of cat.sources) {
+    const r = await kakaoSearch(src, { location: kLL(center), radius: Math.round(radius), sort: kakao.maps.services.SortBy.DISTANCE });
+    error = error || r.error;
+    for (const p of r.items) {
+      if (seen.has(p.id) || !cat.filter(p, src.tag)) continue;
+      seen.add(p.id); items.push(toFacility(p, cat, src.tag, center));
+    }
+  }
+  items.sort((a,b) => a.d - b.d);
+  return { items, error };
+}
+async function analyzeAt(pos, name){
+  if (tab !== 'detail') setTab('detail');
+  const run = ++state.runId;
+  state.pos = pos; state.name = name || ''; state.addr = '';
+  centerMarker.setPosition(kLL(pos)); centerMarker.setMap(map);
+  map.panTo(kLL(pos));
+  drawRings(pos);
+  $('pName').textContent = name || '선택한 지점';
+  $('pAddr').textContent = '주소 확인 중…';
+  loading(true, '주변 시설을 찾는 중…');
+
+  geocoder.coord2Address(pos.lng, pos.lat, (res, status) => {
+    if (run !== state.runId) return;
+    if (status === kakao.maps.services.Status.OK && res[0]) {
+      const r = res[0];
+      state.addr = (r.road_address && r.road_address.address_name) || (r.address && r.address.address_name) || '';
+      if (!name && r.road_address && r.road_address.building_name) { state.name = r.road_address.building_name; $('pName').textContent = state.name; }
+    }
+    $('pAddr').textContent = state.addr || '주소 정보 없음';
+  });
+
+  const all = await Promise.all(CATS.map(c => findCat(c, pos)));
+  if (run !== state.runId) return;
+  loading(false);
+  state.results = {};
+  let anyErr = false;
+  CATS.forEach((c, i) => { state.results[c.id] = all[i].items; anyErr = anyErr || all[i].error; });
+  if (anyErr) toast('일부 검색이 실패했어요. 잠시 후 다시 시도해 주세요.');
+  renderDetail();
+}
+function drawRings(pos){
+  rings.forEach(r => r.setMap(null)); ringLabels.forEach(r => r.setMap(null));
+  rings = []; ringLabels = [];
+  [500, 1000].forEach(r => {
+    const c = new kakao.maps.Circle({ center:kLL(pos), radius:r, strokeWeight:1.5, strokeColor:'#1f3a5f', strokeOpacity:.55, strokeStyle:'dash', fillColor:'#1f3a5f', fillOpacity: r === 500 ? .05 : .025 });
+    c.setMap(map); rings.push(c);
+    const lbl = new kakao.maps.CustomOverlay({ position: kLL({ lat: pos.lat + r/111320, lng: pos.lng }), content:`<div class="ringlbl">${r === 500 ? '500m · 도보 약 7분' : '1km · 도보 약 15분'}</div>`, yAnchor:.5, zIndex:3 });
+    lbl.setMap(map); ringLabels.push(lbl);
+  });
+}
+function computeSummary(){
+  let total = 0;
+  const rows = CATS.map(c => {
+    const list = state.results[c.id] || [];
+    const near = list[0] || null;
+    const d = near ? near.d : null;
+    const pts = scoreOf(c, d);
+    total += pts;
+    return { cat:c, near, d, pts, st:statusOf(c, d), inBest:list.filter(x => x.d <= c.best).length, inMax:list.filter(x => x.d < c.max).length, list };
+  });
+  return { rows, total: Math.round(total / weightSum() * 100) };
+}
+function renderDetail(){
+  const S = computeSummary();
+  state.summary = S;
+  $('saveBtn').disabled = false; $('copyBtn').disabled = false;
+  $('total').textContent = S.total;
+  $('ring').style.setProperty('--p', S.total);
+  const [gt, gd] = gradeOf(S.total);
+  $('gradeT').textContent = gt; $('gradeD').textContent = gd;
+  $('badges').innerHTML = S.rows.map(r => `<span class="bdg ${r.st.cls === 'no' ? '' : r.st.cls}">${r.cat.icon} ${r.cat.label} ${r.st.cls === 'on' ? '✓' : r.st.cls === 'mid' ? '△' : '✕'}</span>`).join('');
+  const openSet = new Set([...document.querySelectorAll('.cat.open')].map(el => el.dataset.id));
+  $('cats').innerHTML = S.rows.map(r => {
+    const c = r.cat;
+    const nearTxt = r.near ? `${esc(r.near.name)} · ${fmtD(r.d)} · 도보 ${walk(r.d)}분` : `반경 ${fmtD(Math.max(2000, c.max*1.5))} 안에 없음`;
+    const list = r.list.slice(0, 6).map((x, i) => `<div class="li" data-cat="${c.id}" data-i="${i}"><span class="ln">${esc(x.name)}${c.id === 'dept' ? ` <span style="color:#9aa0ab">· ${esc(x.tag)}</span>` : ''}</span><span class="ld">${fmtD(x.d)} · ${walk(x.d)}분</span></div>`).join('') || '<p class="muted" style="margin:6px 0">검색된 곳이 없습니다.</p>';
+    return `<div class="cat ${openSet.has(c.id) ? 'open' : ''}" data-id="${c.id}">
+      <div class="cat-h">
+        <div class="cat-ic" style="background:${c.color}1a">${c.icon}</div>
+        <div class="cat-t"><b>${c.label}</b><span>${c.sub}</span><div class="near">${nearTxt}</div></div>
+        <div class="cat-r"><div class="pts">${r.pts.toFixed(1).replace(/\.0$/,'')}<small> / ${c.weight}</small></div><span class="st ${r.st.cls}">${r.st.text}</span></div>
+      </div>
+      <div class="cat-b">${list}<div class="cat-meta">충족(${fmtD(c.best)}) 이내 ${r.inBest}곳 · 한계(${fmtD(c.max)}) 이내 ${r.inMax}곳</div></div></div>`;
+  }).join('');
+  document.querySelectorAll('.cat-h').forEach(h => h.onclick = () => h.parentElement.classList.toggle('open'));
+  document.querySelectorAll('.li').forEach(li => li.onclick = () => {
+    const x = state.results[li.dataset.cat][+li.dataset.i];
+    map.panTo(kLL(x.pos)); openPopup(CATS.find(c => c.id === li.dataset.cat), x);
+  });
+  drawMarkers(S);
+}
+function drawMarkers(S){
+  Object.values(overlays).flat().forEach(o => o.setMap(null));
+  lines.forEach(l => l.setMap(null));
+  overlays = {}; lines = [];
+  S.rows.forEach(r => {
+    const c = r.cat;
+    overlays[c.id] = [];
+    r.list.slice(0, MAX_MARKERS_PER_CAT).forEach((x, i) => {
+      const el = document.createElement('div');
+      el.className = 'mk' + (i === 0 ? ' near' : '') + (x.d >= c.max ? ' far' : '');
+      el.style.background = c.color; el.textContent = c.icon; el.title = `${x.name} (${fmtD(x.d)})`;
+      el.onclick = ev => { ev.stopPropagation(); openPopup(c, x); };
+      const o = new kakao.maps.CustomOverlay({ position:kLL(x.pos), content:el, xAnchor:.5, yAnchor:.5, zIndex: i === 0 ? 30 : 10, clickable:true });
+      o.setMap(map); overlays[c.id].push(o);
+    });
+    if (r.near) {
+      const l = new kakao.maps.Polyline({ path:[kLL(state.pos), kLL(r.near.pos)], strokeWeight:3, strokeColor:c.color, strokeOpacity:.75, strokeStyle:'shortdash' });
+      l.setMap(map); lines.push(l);
+    }
+  });
+}
+function openPopup(cat, x){
+  const el = document.createElement('div');
+  el.className = 'pop';
+  const dTxt = x.d != null ? ` · 직선 ${fmtD(x.d)} · 도보 약 ${walk(x.d)}분` : '';
+  el.innerHTML = `<button class="x" aria-label="닫기">×</button><b>${cat.icon} ${esc(x.name)}</b>
+    <div class="m">${esc(x.tag)}${dTxt}<br>${esc(x.addr || '')}${x.phone ? '<br>' + esc(x.phone) : ''}</div>
+    ${x.url ? `<a href="${esc(x.url)}" target="_blank" rel="noopener">카카오맵에서 보기 →</a>` : ''}`;
+  el.querySelector('.x').onclick = ev => { ev.stopPropagation(); popup.setMap(null); };
+  el.onclick = ev => ev.stopPropagation();
+  popup.setContent(el); popup.setPosition(kLL(x.pos)); popup.setMap(map);
+}
+
+/* ---------- 위치 검색 ---------- */
+$('searchForm').onsubmit = e => {
+  e.preventDefault();
+  const q = $('q').value.trim();
+  if (!q || !places) return;
+  const box = $('results');
+  box.innerHTML = '<div class="empty">검색 중…</div>'; box.classList.add('show');
+  const S = kakao.maps.services;
+  const out = [];
+  let pending = 2;
+  const done = () => {
+    if (--pending) return;
+    box.innerHTML = out.length ? out.slice(0, 12).map((r, i) => `<div class="ri" data-i="${i}"><b><span class="tag">${esc(r.kind)}</span>${esc(r.name)}</b><small>${esc(r.addr)}</small></div>`).join('') : '<div class="empty">검색 결과가 없습니다. 다른 이름이나 주소로 시도해 보세요.</div>';
+    box.querySelectorAll('.ri').forEach(el => el.onclick = () => {
+      const r = out[+el.dataset.i];
+      box.classList.remove('show');
+      if (r.isApt) { map.setCenter(kLL(r.pos)); map.setLevel(4); openApt({ id:r.id, name:r.name, pos:r.pos }); }
+      else { map.setCenter(kLL(r.pos)); map.setLevel(4); findApartments(); }
+    });
+  };
+  geocoder.addressSearch(q, (res, st) => {
+    if (st === S.Status.OK) res.slice(0, 3).forEach(r => out.unshift({ kind:'주소', name:(r.road_address && r.road_address.building_name) || r.address_name, addr:r.address_name, pos:{ lat:+r.y, lng:+r.x } }));
+    done();
+  });
+  places.keywordSearch(q, (res, st) => {
+    if (st === S.Status.OK) res.forEach(p => {
+      const isApt = /아파트\s*$/.test(p.category_name || '');
+      out.push({ id:p.id, isApt, kind: isApt ? '아파트' : ((p.category_group_name || (p.category_name || '').split('>').pop() || '장소').trim()), name:p.place_name, addr:p.road_address_name || p.address_name, pos:{ lat:+p.y, lng:+p.x } });
+    });
+    else if (st === S.Status.ERROR) toast('장소 검색이 거부됐어요. 키·도메인 설정을 확인해 주세요', 3500);
+    done();
+  });
+};
+document.addEventListener('click', e => { if (!e.target.closest('.search')) $('results').classList.remove('show'); });
+
+/* ---------- 요약 · 저장 · 비교 ---------- */
+function summaryText(){
+  const S = state.summary; if (!S) return '';
+  const out = [
+    `[생활편의시설 입지 분석] ${state.name || '선택 지점'}${state.addr ? ' (' + state.addr + ')' : ''}`,
+    `분석 기준: 분석 지점에서 가장 가까운 시설까지 직선거리 / 카카오 로컬 데이터 (${today()} 조회)`,
+  ];
+  S.rows.forEach(r => {
+    const c = r.cat;
+    out.push(r.near
+      ? `- ${c.label}(${c.sub}): ${r.near.name} ${fmtD(r.d)} (도보 약 ${walk(r.d)}분) → ${r.st.text} [${r.pts.toFixed(1)}/${c.weight}점], ${fmtD(c.max)} 이내 ${r.inMax}곳`
+      : `- ${c.label}(${c.sub}): 인근 검색 결과 없음 → 미해당 [0/${c.weight}점]`);
+  });
+  out.push(`종합: ${S.total}/100점 (${gradeOf(S.total)[0]})`);
+  out.push('※ 직선거리 기준으로, 실제 보행경로·대로 횡단 여부·초등학교 배정 학구는 현장 및 교육청 자료로 확인 필요');
+  return out.join('\n');
+}
+async function copyText(t){
+  try { await navigator.clipboard.writeText(t); return true; }
+  catch(e) {
+    const ta = document.createElement('textarea'); ta.value = t; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select();
+    let ok = false; try { ok = document.execCommand('copy'); } catch(_){}
+    ta.remove(); return ok;
+  }
+}
+$('copyBtn').onclick = async () => { const t = summaryText(); if (!t) return; toast(await copyText(t) ? '요약을 복사했어요' : '복사하지 못했어요'); };
+
+let saved = LS.get('lm_saved', []);
+$('saveBtn').onclick = () => {
+  const S = state.summary; if (!S || !state.pos) return;
+  const item = { id: Date.now(), name: state.name || '선택 지점', addr: state.addr, lat: state.pos.lat, lng: state.pos.lng, total: S.total, date: today(),
+    cats: Object.fromEntries(S.rows.map(r => [r.cat.id, { d: r.d, name: r.near ? r.near.name : '' }])) };
+  saved = saved.filter(s => !(Math.abs(s.lat - item.lat) < 1e-5 && Math.abs(s.lng - item.lng) < 1e-5));
+  saved.unshift(item); LS.set('lm_saved', saved); renderCmp(); toast('후보지에 저장했어요');
+};
+function renderCmp(){
+  if (!saved.length) { $('cmpBox').innerHTML = '<p class="muted">저장한 후보지가 여기에 나란히 비교됩니다.</p>'; return; }
+  const best = Math.max(...saved.map(s => s.total));
+  $('cmpBox').innerHTML = `<table class="cmp"><thead><tr><th>후보지</th><th>총점</th>${CATS.map(c => `<th title="${c.sub}">${c.icon}</th>`).join('')}<th></th></tr></thead><tbody>
+    ${saved.map((s, i) => `<tr><td class="nm" data-i="${i}" title="${esc(s.addr)}">${esc(s.name)}</td><td style="font-weight:700;${s.total === best ? 'color:var(--ok)' : ''}">${s.total}</td>
+      ${CATS.map(c => { const v = s.cats[c.id]; return `<td title="${esc(v && v.name)}">${v && v.d != null ? fmtD(v.d) : '–'}</td>`; }).join('')}
+      <td><button class="del" data-del="${i}" aria-label="삭제">×</button></td></tr>`).join('')}
+  </tbody></table><p class="muted" style="margin:6px 0 0">각 칸은 가장 가까운 시설까지 직선거리입니다. 이름을 누르면 그 위치를 다시 분석합니다.</p>`;
+  $('cmpBox').querySelectorAll('.nm').forEach(td => td.onclick = () => { const s = saved[+td.dataset.i]; analyzeAt({ lat:s.lat, lng:s.lng }, s.name); });
+  $('cmpBox').querySelectorAll('[data-del]').forEach(b => b.onclick = () => { saved.splice(+b.dataset.del, 1); LS.set('lm_saved', saved); renderCmp(); });
+}
+$('copyTableBtn').onclick = async () => {
+  if (!saved.length) return toast('저장된 후보지가 없어요');
+  const head = ['후보지', '주소', '총점', ...CATS.flatMap(c => [`${c.label} 최근접`, `${c.label} 거리(m)`]), '조회일'];
+  const rows = saved.map(s => [s.name, s.addr || '', s.total, ...CATS.flatMap(c => { const v = s.cats[c.id] || {}; return [v.name || '', v.d != null ? Math.round(v.d) : '']; }), s.date]);
+  toast(await copyText([head, ...rows].map(r => r.join('\t')).join('\n')) ? '표를 복사했어요. 엑셀에 붙여넣으세요' : '복사하지 못했어요');
+};
+
+/* ---------- 평가 기준 ---------- */
+function renderSettings(){
+  $('setGrid').innerHTML = '<div class="h">항목</div><div class="h">충족(m)</div><div class="h">한계(m)</div><div class="h">배점</div>' +
+    CATS.map(c => `<div>${c.icon} ${c.label}</div>
+      <input type="number" min="50" step="50" data-k="best" data-id="${c.id}" value="${c.best}">
+      <input type="number" min="100" step="100" data-k="max" data-id="${c.id}" value="${c.max}">
+      <input type="number" min="0" step="5" data-k="weight" data-id="${c.id}" value="${c.weight}">`).join('');
+}
+function afterRulesChange(){
+  renderSettings(); renderChips(); renderLegend();
+  if (area) { computeArea(); renderArea(); }
+  if (state.pos && state.summary) renderDetail();
+}
+$('applySet').onclick = () => {
+  const rules = {};
+  CATS.forEach(c => rules[c.id] = { best:c.best, max:c.max, weight:c.weight });
+  document.querySelectorAll('#setGrid input').forEach(inp => { rules[inp.dataset.id][inp.dataset.k] = Math.max(0, +inp.value || 0); });
+  for (const id in rules) if (rules[id].max <= rules[id].best) rules[id].max = rules[id].best + 100;
+  LS.set('lm_rules', rules); CATS = loadCats(); afterRulesChange();
+  toast('평가 기준을 적용했어요');
+};
+$('resetSet').onclick = () => { LS.del('lm_rules'); CATS = loadCats(); afterRulesChange(); toast('기본값으로 되돌렸어요'); };
+
+renderSettings();
+renderChips();
+renderCmp();
+boot();
+</script>
+</body>
+</html>

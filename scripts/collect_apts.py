@@ -31,8 +31,10 @@ LIST_PATHS = ["AptListService4/getTotalAptList4", "AptListServiceV4/getTotalAptL
 BASIC_PATH = "AptBasisInfoServiceV5/getAphusBassInfoV5"
 OUT = os.environ.get("OUT_FILE", "data/apts.json")
 MAX_CALLS = int(os.environ.get("MAX_CALLS", "4500"))
-WORKERS = int(os.environ.get("WORKERS", "4"))
+WORKERS = int(os.environ.get("WORKERS", "2"))
 STALE_DAYS = 180
+TIME_LIMIT = int(os.environ.get("TIME_LIMIT", "6600"))  # 초. 작업 제한시간(150분) 전에 멈추고 저장
+START = time.time()
 PRIORITY = ["11", "41", "28"]  # 법정동코드 앞 2자리: 서울, 경기, 인천
 TODAY = dt.date.today().isoformat()
 
@@ -121,7 +123,7 @@ def items_of(obj):
 
 
 # ---------------------------------------------------------------- 호출
-def call(path, params, tries=3):
+def call(path, params, tries=3, want_raw=False):
     q = dict(params)
     q["serviceKey"] = KEY
     q["_type"] = "json"
@@ -131,7 +133,9 @@ def call(path, params, tries=3):
         try:
             req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (zipzip-spot collector)"})
             with urllib.request.urlopen(req, timeout=40) as r:
-                return parse(r.read().decode("utf-8", "replace"))
+                raw = r.read().decode("utf-8", "replace")
+            obj = parse(raw)
+            return (obj, raw) if want_raw else obj
         except (QuotaError, FatalError):
             raise
         except urllib.error.HTTPError as e:
@@ -241,17 +245,30 @@ def main():
     result = dict(old)
     lock = threading.Lock()
     stop = threading.Event()
-    stats = {"ok": 0, "fail": 0, "quota": False, "fatal": None}
+    stats = {"ok": 0, "fail": 0, "empty": 0, "quota": False, "fatal": None}
 
     def work(code):
         if stop.is_set():
             return
+        if time.time() - START > TIME_LIMIT:
+            stop.set()
+            with lock:
+                stats["timeup"] = True
+            return
         try:
-            obj = call(BASIC_PATH, {"kaptCode": code})
-            its = items_of(obj)
+            its, raw = [], ""
+            for attempt in range(2):  # 빈 응답이면 잠깐 쉬고 한 번 더
+                obj, raw = call(BASIC_PATH, {"kaptCode": code}, want_raw=True)
+                its = items_of(obj)
+                if its:
+                    break
+                time.sleep(1.0)
             if not its:
                 with lock:
                     stats["fail"] += 1
+                    stats["empty"] += 1
+                    if stats["empty"] <= 5:
+                        log(f"   {code} 빈 응답 예시: {raw[:300]}")
                 return
             rec = norm_basic(its[0], code, listed.get(code, {}))
             with lock:
@@ -272,7 +289,7 @@ def main():
                 stats["fail"] += 1
                 if stats["fail"] <= 5:
                     log(f"   {code} 실패: {e}")
-        time.sleep(0.05)
+        time.sleep(0.25)
 
     with cf.ThreadPoolExecutor(max_workers=WORKERS) as ex:
         list(ex.map(work, queue))
@@ -295,8 +312,10 @@ def main():
         f"### 아파트 기본정보 수집 결과 ({TODAY})",
         f"- 전국 단지: **{len(listed):,}곳**",
         f"- 수집 완료: **{len(result):,}곳 ({pct}%)**",
-        f"- 이번 실행: 성공 {stats['ok']:,}곳, 실패 {stats['fail']:,}곳",
+        f"- 이번 실행: 성공 {stats['ok']:,}곳, 실패 {stats['fail']:,}곳 (그중 빈 응답 {stats['empty']:,}곳)",
     ]
+    if stats.get("timeup"):
+        summary.append("- 실행 시간이 길어져 중간에 멈추고 저장했습니다. 다음 실행에서 이어서 수집합니다.")
     if stats["quota"]:
         summary.append("- 오늘 호출 한도에 도달해 멈췄습니다. 내일 이어서 수집합니다.")
     if stats["fatal"]:

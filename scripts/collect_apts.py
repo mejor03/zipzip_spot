@@ -17,6 +17,7 @@ import concurrent.futures as cf
 import datetime as dt
 import json
 import os
+import re
 import sys
 import threading
 import time
@@ -241,7 +242,7 @@ def region_of(addr):
 
 def write_region_files(items, updated, total):
     """앱이 보이는 지역만 빠르게 받도록 data/apt/{지역}.json 으로 나눠 저장
-    한 단지 = [단지명, 지번주소, 도로명주소, 준공연도, 세대수, 동수]"""
+    한 단지 = [단지명, 지번주소, 도로명주소, 사용승인일(YYYYMMDD), 세대수, 동수]"""
     base = os.path.join(os.path.dirname(OUT) or ".", "apt")
     os.makedirs(base, exist_ok=True)
     groups = {}
@@ -249,8 +250,12 @@ def write_region_files(items, updated, total):
         slug = region_of(r.get("a")) or region_of(r.get("r"))
         if not slug:
             continue
-        year = int(r["u"][:4]) if (r.get("u") or "")[:4].isdigit() else 0
-        groups.setdefault(slug, []).append([r.get("n", ""), r.get("a", ""), r.get("r", ""), year, r.get("h") or 0, r.get("d") or 0])
+        name = r.get("n", "")
+        if re.match(r"^\s*(test|테스트|테슽)", name, re.I):  # 시스템 시험용 단지 제외
+            continue
+        u = r.get("u") or ""
+        use = int(u[:8]) if len(u) >= 8 and u[:8].isdigit() else (int(u[:4]) * 10000 if u[:4].isdigit() else 0)
+        groups.setdefault(slug, []).append([name, r.get("a", ""), r.get("r", ""), use, r.get("h") or 0, r.get("d") or 0])
     for name in os.listdir(base):  # 이전 파일 정리
         if name.endswith(".json"):
             os.remove(os.path.join(base, name))

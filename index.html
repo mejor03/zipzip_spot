@@ -324,6 +324,8 @@ const LABEL_LIMIT = 40;            // 지도에 이름표로 보여줄 최대 �
 const BIG_MART = /(이마트|홈플러스|롯데마트|코스트코|트레이더스|하나로마트|메가마트|빅마켓)/;
 const SSM = /(에브리데이|익스프레스|노브랜드|슈퍼|편의점|주유소|주차장|정육|문화센터)/;
 const NOISE = /(주차장|주차타워|정문|후문|입구|출구|ATM|매표소|고객센터|사무실|물류|배송센터)/;
+// 아직 준공되지 않은 공사·분양 현장 (카카오에 '아파트'로 올라와 있는 경우)
+const APT_UNBUILT = /(신축|공사|현장|예정|가칭|착공|건립|입주자\s*모집|정비구역|정비사업|추진위|조합|사업부지|부지)/;
 const APT_NOISE = /(상가|관리사무소|관리동|경로당|노인정|어린이집|유치원|놀이터|주차장|정문|후문|입구|커뮤니티|피트니스|독서실|분양|모델하우스|홍보관|견본주택|공인중개|부동산|\d+\s*동$)/;
 
 const DEFAULT_CATS = [
@@ -467,7 +469,9 @@ function nameSim(a, b){
 }
 function addKapt(rows){
   for (const x of rows) {
-    const r = { n:x[0], a:x[1], r:x[2], u: x[3] ? String(x[3]) : '', h:x[4] || null, d:x[5] || null };
+    if (/^\s*(test|테스트|테슽)/i.test(x[0])) continue;
+    const use = x[3] && x[3] < 10000 ? x[3] * 10000 : x[3];           // 예전 형식(연도만)도 처리
+    const r = { n:x[0], a:x[1], r:x[2], u: use ? String(use) : '', h:x[4] || null, d:x[5] || null };
     r._nn = nameNorm(r.n);
     const rk = roadKey(r.r); if (rk) { if (!KAPT.byRoad.has(rk)) KAPT.byRoad.set(rk, []); KAPT.byRoad.get(rk).push(r); }
     const dk = dongKey(r.a); if (dk) { if (!KAPT.byDong.has(dk)) KAPT.byDong.set(dk, []); KAPT.byDong.get(dk).push(r); }
@@ -759,7 +763,7 @@ async function findApartments(){
   const seen = new Set(), apts = [];
   for (const p of aptR.items) {
     if (seen.has(p.id)) continue; seen.add(p.id);
-    if (!/아파트\s*$/.test(p.category_name || '') || APT_NOISE.test(p.place_name.trim())) continue;
+    if (!/아파트\s*$/.test(p.category_name || '') || APT_NOISE.test(p.place_name.trim()) || APT_UNBUILT.test(p.place_name)) continue;
     apts.push({ id:p.id, name:p.place_name, pos:{ lat:+p.y, lng:+p.x }, addr:p.road_address_name || p.address_name, jibun:p.address_name, road:p.road_address_name });
   }
   const fac = {};
@@ -783,11 +787,14 @@ async function findApartments(){
   if (anyErr) toast('일부 검색이 실패해 결과가 덜 나왔을 수 있어요');
 }
 
+const TODAY_N = (() => { const d = new Date(); return d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate(); })();
+const isUnbuilt = k => !!(k && /^\d{8}$/.test(k.u || '') && +k.u > TODAY_N);
 function computeArea(){
   if (!area) return;
   const W = weightSum();
   area.apts.forEach(a => {
     a.k = matchKapt({ name:a.name, addr:a.jibun, road:a.road });
+    a.unbuilt = isUnbuilt(a.k);
     let total = 0;
     a.cats = {};
     CATS.forEach(c => {
@@ -799,6 +806,7 @@ function computeArea(){
     });
     a.total = Math.round(total / W * 100);
   });
+  area.apts = area.apts.filter(a => !a.unbuilt);   // 사용승인일이 아직 안 된 단지 제외
   area.apts.sort((x, y) => y.total - x.total);
 }
 

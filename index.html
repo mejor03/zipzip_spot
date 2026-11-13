@@ -4,7 +4,15 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>생활권 아파트 지도 — 초품아 · 스세권 · 맥세권 · 백세권 · 다세권 · 올세권</title>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css">
+<script>
+  /* 연결 진단용 기록 (화면 아래 '연결 진단'에서 확인) */
+  window.DIAG = { t0: performance.now(), items: {}, places: { n:0, ms:0, max:0, err:0, cached:0 } };
+  window.diagSet = (k, v) => { DIAG.items[k] = Object.assign(DIAG.items[k] || {}, v); };
+</script>
+<!-- 글꼴은 화면을 막지 않도록 비동기로 불러옴 (회사망에서 막혀도 기본 글꼴로 바로 표시) -->
+<link rel="preload" as="style" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css"
+  onload="this.rel='stylesheet';diagSet('font',{ok:true,ms:Math.round(performance.now()-DIAG.t0)})"
+  onerror="diagSet('font',{ok:false,ms:Math.round(performance.now()-DIAG.t0)})">
 <style>
   :root{
     --bg:#f6f5f2; --panel:#ffffff; --ink:#1b1d21; --ink2:#5b6170; --ink3:#9aa0ab;
@@ -265,7 +273,7 @@
         <div class="actions"><button class="btn primary" id="applySet">적용</button><button class="btn" id="resetSet">기본값</button></div>
       </details>
     </div>
-    <div class="foot">장소 데이터: 카카오 로컬 · 직선거리 기준이며 실제 보행경로, 큰길 횡단 여부, 배정 초등학교(학구)는 별도 확인이 필요합니다. <button class="linkbtn" id="keyBtn">API 키 변경</button></div>
+    <div class="foot">장소 데이터: 카카오 로컬 · 직선거리 기준이며 실제 보행경로, 큰길 횡단 여부, 배정 초등학교(학구)는 별도 확인이 필요합니다. <button class="linkbtn" id="keyBtn">API 키 변경</button> · <button class="linkbtn" id="diagBtn">연결 진단</button></div>
   </aside>
 
   <main class="mapwrap">
@@ -288,6 +296,15 @@
     <input id="keyInput" placeholder="JavaScript 키 (32자리)">
     <div class="err" id="keyErr"></div>
     <div class="row"><button class="btn primary" id="keySave">지도 불러오기</button></div>
+  </div>
+</div>
+<div class="modal" id="diagModal">
+  <div class="card">
+    <h2>연결 진단</h2>
+    <p id="diagMsg">이 PC에서 각 단계가 얼마나 걸렸는지 보여줍니다. 느리거나 실패한 항목이 원인이에요.</p>
+    <table class="cmp" id="diagTable"></table>
+    <p class="muted" id="diagHint" style="margin-top:10px"></p>
+    <div class="row"><button class="btn" id="diagCopy">내용 복사</button><button class="btn primary" id="diagClose">닫기</button></div>
   </div>
 </div>
 <div class="toast" id="toast"></div>
@@ -362,7 +379,7 @@ const fmtD = d => d == null ? '–' : (d < 1000 ? Math.round(d) + 'm' : (d % 100
 const walk = d => Math.max(1, Math.round(d / WALK_M_PER_MIN));
 function toast(msg, ms){ const t = $('toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toast._t); toast._t = setTimeout(()=>t.classList.remove('show'), ms || 2000); }
 function today(){ const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); }
-function loading(on, text){ const l = $('loading'); if (text) l.textContent = text; l.classList.toggle('show', !!on); }
+function loading(on, text){ const l = $('loading'); if (text) { l.textContent = text; if (typeof PROG !== 'undefined') PROG.base = ''; } l.classList.toggle('show', !!on); }
 
 function scoreOf(cat, d){
   if (d == null || d >= cat.max) return 0;
@@ -382,18 +399,42 @@ function gradeOf(total){
   return ['취약', '생활편의시설 접근성이 낮은 편입니다. 개발계획 등 보완 요인을 함께 보세요.'];
 }
 
-/* ---------- 단지 기본정보 (K-apt, GitHub Actions가 매일 수집한 data/apts.json) ---------- */
+/* ---------- 단지 기본정보 (K-apt, GitHub Actions가 매일 수집 → data/apt/{지역}.json) ---------- */
 const THIS_YEAR = new Date().getFullYear();
-let KAPT = { ready:false, byRoad:new Map(), byDong:new Map(), total:0, count:0, updated:'', error:'' };
+let KAPT = { ready:false, byRoad:new Map(), byDong:new Map(), total:0, count:0, updated:'', error:'', regions:{}, loaded:{} };
 let aptf = Object.assign({ age:'', hh:'', known:false }, LS.get('lm_aptf', {}));
 
-function aptDataUrls(){
-  const urls = [];
+// 같은 사이트의 파일을 먼저, 안 되면 GitHub 원본에서 — 각각 시간 제한을 둠
+function dataUrls(path){
+  const urls = [path];
   const m = location.hostname.match(/^([^.]+)\.github\.io$/i);
   const repo = location.pathname.split('/').filter(Boolean)[0];
-  if (m && repo && !/\.html?$/i.test(repo)) urls.push(`https://raw.githubusercontent.com/${m[1]}/${repo}/main/data/apts.json`);
-  urls.push('data/apts.json');
+  if (m && repo && !/\.html?$/i.test(repo)) urls.push(`https://raw.githubusercontent.com/${m[1]}/${repo}/main/${path}`);
   return urls;
+}
+async function fetchJson(path, timeoutMs){
+  let lastErr = '';
+  for (const url of dataUrls(path)) {
+    const ctl = 'AbortController' in window ? new AbortController() : null;
+    const timer = setTimeout(() => ctl && ctl.abort(), timeoutMs || 10000);
+    const t = performance.now();
+    try {
+      const r = await fetch(url, { cache:'no-cache', signal: ctl ? ctl.signal : undefined });
+      if (!r.ok) { lastErr = 'HTTP ' + r.status; continue; }
+      const j = await r.json();
+      diagSet('data:' + path, { ok:true, ms:Math.round(performance.now() - t), src: url.startsWith('http') ? 'GitHub 원본' : '사이트' });
+      return j;
+    } catch(e) { lastErr = e.name === 'AbortError' ? '시간 초과' : '연결 실패'; }
+    finally { clearTimeout(timer); }
+  }
+  diagSet('data:' + path, { ok:false, err:lastErr });
+  throw new Error(lastErr);
+}
+const REGION_RULES = [['서울','seoul'],['부산','busan'],['대구','daegu'],['인천','incheon'],['광주','gwangju'],['대전','daejeon'],['울산','ulsan'],['세종','sejong'],['경기','gyeonggi'],['강원','gangwon'],['충북','chungbuk'],['충청북','chungbuk'],['충남','chungnam'],['충청남','chungnam'],['전북','jeonbuk'],['전라북','jeonbuk'],['전남','jeonnam'],['전라남','jeonnam'],['경북','gyeongbuk'],['경상북','gyeongbuk'],['경남','gyeongnam'],['경상남','gyeongnam'],['제주','jeju']];
+function regionOf(addr){
+  const first = String(addr || '').trim().split(/\s+/)[0] || '';
+  for (const [pre, slug] of REGION_RULES) if (first.startsWith(pre)) return slug;
+  return '';
 }
 const addrTokens = a => String(a || '').replace(/\(.*?\)/g, ' ').replace(/,/g, ' ').trim().split(/\s+/).filter(Boolean);
 function roadKey(addr){
@@ -424,28 +465,33 @@ function nameSim(a, b){
   }
   return numClash ? Math.min(sc, .3) : sc;
 }
-function indexKapt(j){
-  KAPT.byRoad = new Map(); KAPT.byDong = new Map();
-  for (const r of (j.items || [])) {
+function addKapt(rows){
+  for (const x of rows) {
+    const r = { n:x[0], a:x[1], r:x[2], u: x[3] ? String(x[3]) : '', h:x[4] || null, d:x[5] || null };
     r._nn = nameNorm(r.n);
     const rk = roadKey(r.r); if (rk) { if (!KAPT.byRoad.has(rk)) KAPT.byRoad.set(rk, []); KAPT.byRoad.get(rk).push(r); }
     const dk = dongKey(r.a); if (dk) { if (!KAPT.byDong.has(dk)) KAPT.byDong.set(dk, []); KAPT.byDong.get(dk).push(r); }
   }
-  KAPT.total = j.total || 0; KAPT.count = j.count || (j.items || []).length; KAPT.updated = j.updated || ''; KAPT.ready = true;
 }
+// 목록(어느 지역 파일이 있는지)만 먼저 — 아주 작은 파일
 async function loadKapt(){
-  for (const url of aptDataUrls()) {
-    try {
-      const r = await fetch(url, { cache:'no-cache' });
-      if (!r.ok) continue;
-      indexKapt(await r.json());
-      break;
-    } catch(e) {}
-  }
-  if (!KAPT.ready) KAPT.error = 'missing';
+  try {
+    const j = await fetchJson('data/apt/index.json', 8000);
+    KAPT.total = j.total || 0; KAPT.count = j.count || 0; KAPT.updated = j.updated || ''; KAPT.regions = j.regions || {};
+    KAPT.ready = true;
+  } catch(e) { KAPT.error = 'missing'; }
   renderKaptStatus();
-  if (area) { computeArea(); renderArea(); }
-  if (state.pos && state.summary && !state.k) { state.k = matchKapt({ name:state.name, addr:state.jibun, road:state.road }); renderK(); }
+  if (area) { await ensureKapt(area.apts.map(a => a.jibun || a.addr)); computeArea(); renderArea(); }
+}
+// 필요한 지역 파일만 받아서 색인 (한 번 받은 지역은 다시 안 받음)
+function loadRegion(slug){
+  if (!KAPT.loaded[slug]) KAPT.loaded[slug] = fetchJson(`data/apt/${slug}.json`, 15000).then(addKapt).catch(() => { delete KAPT.loaded[slug]; });
+  return KAPT.loaded[slug];
+}
+async function ensureKapt(addrs){
+  if (!KAPT.ready) return;
+  const need = [...new Set(addrs.map(regionOf).filter(sl => sl && KAPT.regions[sl]))];
+  if (need.length) await Promise.all(need.map(loadRegion));
 }
 function matchKapt(a){
   if (!KAPT.ready || !a) return null;
@@ -519,20 +565,32 @@ function loadSdk(key){
     if (window.kakao && window.kakao.maps && window.kakao.maps.services) return resolve();
     const s = document.createElement('script');
     s.src = 'https://dapi.kakao.com/v2/maps/sdk.js?appkey=' + encodeURIComponent(key) + '&libraries=services&autoload=false';
-    const timer = setTimeout(() => reject(new Error('timeout')), 8000);
+    const t = performance.now();
+    const fail = why => { diagSet('sdk', { ok:false, err:why, ms:Math.round(performance.now() - t) }); reject(new Error(why)); };
+    const timer = setTimeout(() => fail('timeout'), 25000);   // 느린 회사망을 감안해 넉넉히
     s.onload = () => {
-      if (!window.kakao || !window.kakao.maps) { clearTimeout(timer); return reject(new Error('sdk')); }
-      window.kakao.maps.load(() => { clearTimeout(timer); window.kakao.maps.services ? resolve() : reject(new Error('services')); });
+      if (!window.kakao || !window.kakao.maps) { clearTimeout(timer); return fail('sdk'); }
+      window.kakao.maps.load(() => {
+        clearTimeout(timer);
+        if (!window.kakao.maps.services) return fail('services');
+        diagSet('sdk', { ok:true, ms:Math.round(performance.now() - t) });
+        resolve();
+      });
     };
-    s.onerror = () => { clearTimeout(timer); reject(new Error('network')); };
+    s.onerror = () => { clearTimeout(timer); fail('network'); };
     document.head.appendChild(s);
   });
 }
 async function boot(){
   const key = getKey();
   if (!key) return showKeyModal();
-  try { await loadSdk(key); $('keyModal').classList.remove('show'); initMap(); }
-  catch(e) { showKeyModal('지도를 불러오지 못했습니다. 키가 맞는지, 이 주소가 JavaScript SDK 도메인에 등록됐는지, 카카오맵 사용 설정이 켜져 있는지 확인해 주세요.'); }
+  loading(true, '카카오 지도 불러오는 중…');
+  try { await loadSdk(key); loading(false); $('keyModal').classList.remove('show'); initMap(); }
+  catch(e) {
+    loading(false);
+    if (e.message === 'timeout' || e.message === 'network') { openDiag('카카오 지도 서버(dapi.kakao.com)에 연결하지 못했어요. 회사망에서 카카오가 막혀 있거나 매우 느린 경우입니다.'); return; }
+    showKeyModal('지도를 불러오지 못했습니다. 키가 맞는지, 이 주소가 JavaScript SDK 도메인에 등록됐는지, 카카오맵 사용 설정이 켜져 있는지 확인해 주세요.');
+  }
 }
 $('keySave').onclick = () => {
   const k = $('keyInput').value.trim();
@@ -599,11 +657,29 @@ $('findBtn').onclick = () => findApartments();
 
 /* ---------- 카카오 로컬 검색 ---------- */
 // 한 번의 검색(최대 3페이지 × 15건 = 45건)
-function kakaoSearch(src, opts){
+// 같은 조건의 검색 결과는 기억해 두고 다시 부르지 않음 (지역을 다시 찾거나 탭을 오갈 때 즉시 표시)
+const SEARCH_CACHE = new Map();
+const PROG = { base:'', total:0, done:0 };
+function progStart(base){ PROG.total = 0; PROG.done = 0; loading(true, base); PROG.base = base; }
+function progTick(){ if ($('loading').classList.contains('show') && PROG.base) $('loading').textContent = `${PROG.base} (${PROG.done}/${PROG.total})`; }
+function kakaoSearch(src, opts, key){
+  const ck = key ? (src.type + ':' + (src.q || src.code) + '|' + key) : '';
+  if (ck && SEARCH_CACHE.has(ck)) { DIAG.places.cached++; return Promise.resolve(SEARCH_CACHE.get(ck)); }
+  PROG.total++; progTick();
+  const t0 = performance.now();
   return new Promise(resolve => {
     const out = [], S = kakao.maps.services;
     let done = false;
-    const finish = (err, status) => { if (!done) { done = true; resolve({ items: out, error: err, status }); } };
+    const finish = (err, status) => {
+      if (done) return;
+      done = true;
+      const ms = performance.now() - t0;
+      DIAG.places.n++; DIAG.places.ms += ms; DIAG.places.max = Math.max(DIAG.places.max, ms); if (err) DIAG.places.err++;
+      PROG.done++; progTick();
+      const res = { items: out, error: err, status };
+      if (ck && !err) { SEARCH_CACHE.set(ck, res); if (SEARCH_CACHE.size > 600) SEARCH_CACHE.delete(SEARCH_CACHE.keys().next().value); }
+      resolve(res);
+    };
     const timer = setTimeout(() => finish(true, 'TIMEOUT'), 10000);
     const cb = (data, status, pg) => {
       if (status === S.Status.OK) {
@@ -620,7 +696,7 @@ function kakaoSearch(src, opts){
 }
 // 영역 검색: 결과가 45건으로 꽉 차면 4등분해서 다시 검색 (최대 2단계)
 async function searchArea(src, sw, ne, depth){
-  const r = await kakaoSearch(src, { bounds: new kakao.maps.LatLngBounds(kLL(sw), kLL(ne)) });
+  const r = await kakaoSearch(src, { bounds: new kakao.maps.LatLngBounds(kLL(sw), kLL(ne)) }, `b${sw.lat.toFixed(4)},${sw.lng.toFixed(4)},${ne.lat.toFixed(4)},${ne.lng.toFixed(4)}`);
   if (r.items.length >= 45 && depth < 2) {
     const mid = { lat:(sw.lat+ne.lat)/2, lng:(sw.lng+ne.lng)/2 };
     const quads = [[sw, mid], [{lat:sw.lat, lng:mid.lng}, {lat:mid.lat, lng:ne.lng}], [{lat:mid.lat, lng:sw.lng}, {lat:ne.lat, lng:mid.lng}], [mid, ne]];
@@ -661,7 +737,7 @@ async function findApartments(){
   const run = ++findRun;
   const b = map.getBounds();
   const sw = toLL(b.getSouthWest()), ne = toLL(b.getNorthEast());
-  loading(true, '아파트와 주변 시설을 찾는 중…');
+  progStart('아파트와 주변 시설을 찾는 중…');
   info.className = 'findinfo'; info.textContent = '찾는 중…';
 
   const [aptR, ...facR] = await Promise.all([
@@ -693,10 +769,14 @@ async function findApartments(){
   if (anyErr && !aptR.items.length && facR.every(r => !r.items.length)) {
     area = null; clearArea();
     info.className = 'findinfo err';
-    info.innerHTML = '<b>카카오 장소 검색이 응답하지 않았어요.</b><br>지도는 떴는데 검색만 막힌 경우, 파일을 더블클릭으로 연 상태(file://)라서 카카오가 도메인을 확인하지 못한 경우가 많습니다. 명령 프롬프트에서 <code>python -m http.server 8080</code>으로 띄운 뒤 <code>http://localhost:8080/living-map.html</code>로 열어 보세요. (JavaScript SDK 도메인에 <code>http://localhost:8080</code> 등록 필요)';
+    info.innerHTML = '<b>카카오 장소 검색이 응답하지 않았어요.</b><br>회사망에서 카카오(dapi.kakao.com) 접속이 막혔거나 매우 느린 경우일 수 있어요. 화면 맨 아래 <b>연결 진단</b>을 눌러 어느 단계에서 막히는지 확인해 주세요.';
     $('aptList').innerHTML = '';
     return;
   }
+  loading(true, '단지 정보 맞춰 보는 중…');
+  await ensureKapt(apts.map(a => a.jibun || a.addr));
+  if (run !== findRun) return;
+  loading(false);
   area = { apts, fac, error: anyErr };
   computeArea();
   renderArea();
@@ -812,7 +892,7 @@ async function findCat(cat, center){
   const seen = new Set(), items = [];
   let error = false;
   for (const src of cat.sources) {
-    const r = await kakaoSearch(src, { location: kLL(center), radius: Math.round(radius), sort: kakao.maps.services.SortBy.DISTANCE });
+    const r = await kakaoSearch(src, { location: kLL(center), radius: Math.round(radius), sort: kakao.maps.services.SortBy.DISTANCE }, `l${center.lat.toFixed(5)},${center.lng.toFixed(5)},${Math.round(radius)}`);
     error = error || r.error;
     for (const p of r.items) {
       if (seen.has(p.id) || !cat.filter(p, src.tag)) continue;
@@ -835,7 +915,7 @@ async function analyzeAt(pos, name, k){
   drawRings(pos);
   $('pName').textContent = name || '선택한 지점';
   $('pAddr').textContent = '주소 확인 중…';
-  loading(true, '주변 시설을 찾는 중…');
+  progStart('주변 시설을 찾는 중…');
 
   geocoder.coord2Address(pos.lng, pos.lat, (res, status) => {
     if (run !== state.runId) return;
@@ -844,7 +924,10 @@ async function analyzeAt(pos, name, k){
       state.addr = (r.road_address && r.road_address.address_name) || (r.address && r.address.address_name) || '';
       state.road = (r.road_address && r.road_address.address_name) || ''; state.jibun = (r.address && r.address.address_name) || '';
       if (!name && r.road_address && r.road_address.building_name) { state.name = r.road_address.building_name; $('pName').textContent = state.name; }
-      if (!state.k) { state.k = matchKapt({ name: state.name, addr: state.jibun, road: state.road }); renderK(); }
+      if (!state.k) ensureKapt([state.jibun, state.road]).then(() => {
+        if (run !== state.runId || state.k) return;
+        state.k = matchKapt({ name: state.name, addr: state.jibun, road: state.road }); renderK();
+      });
     }
     $('pAddr').textContent = state.addr || '주소 정보 없음';
   });
@@ -1055,6 +1138,42 @@ $('applySet').onclick = () => {
   toast('평가 기준을 적용했어요');
 };
 $('resetSet').onclick = () => { LS.del('lm_rules'); CATS = loadCats(); afterRulesChange(); toast('기본값으로 되돌렸어요'); };
+
+/* ---------- 연결 진단 ---------- */
+function diagRows(){
+  const I = DIAG.items, rows = [];
+  const sec = ms => ms == null ? '–' : (ms / 1000).toFixed(1) + '초';
+  const st = (ok, ms, slow) => ok === undefined ? '대기' : !ok ? '실패' : (ms > slow ? '느림' : '정상');
+  rows.push(['글꼴(외부, 없어도 동작)', I.font ? st(I.font.ok, I.font.ms, 3000) : (performance.now() > 5000 ? '응답 없음' : '대기'), I.font ? sec(I.font.ms) : '–']);
+  rows.push(['카카오 지도 프로그램', st(I.sdk && I.sdk.ok, I.sdk && I.sdk.ms, 4000), sec(I.sdk && I.sdk.ms) + (I.sdk && I.sdk.err ? ' (' + I.sdk.err + ')' : '')]);
+  const tiles = performance.getEntriesByType('resource').filter(e => /daumcdn|kakaocdn/.test(e.name) && /\.(png|jpg|webp)/.test(e.name));
+  if (tiles.length) { const avg = tiles.reduce((a, e) => a + e.duration, 0) / tiles.length; rows.push(['지도 그림(타일) ' + tiles.length + '장', avg > 1500 ? '느림' : '정상', '평균 ' + sec(avg)]); }
+  const P = DIAG.places;
+  rows.push(['카카오 장소 검색', P.n ? (P.err > P.n / 3 ? '실패 많음' : (P.ms / P.n > 1500 ? '느림' : '정상')) : '대기',
+    P.n ? `${P.n}회 · 평균 ${sec(P.ms / P.n)} · 최대 ${sec(P.max)}${P.err ? ' · 실패 ' + P.err : ''}${P.cached ? ' · 재사용 ' + P.cached : ''}` : '–']);
+  Object.keys(I).filter(k => k.startsWith('data:')).forEach(k => {
+    const v = I[k], name = k.replace('data:data/apt/', '단지 정보 ').replace('.json', '');
+    rows.push([name, v.ok ? (v.ms > 3000 ? '느림' : '정상') : '실패', v.ok ? sec(v.ms) + ' · ' + v.src : (v.err || '')]);
+  });
+  return rows;
+}
+function openDiag(msg){
+  if (msg) $('diagMsg').textContent = msg;
+  const rows = diagRows();
+  $('diagTable').innerHTML = '<thead><tr><th>단계</th><th>상태</th><th>시간</th></tr></thead><tbody>' +
+    rows.map(r => `<tr><td>${esc(r[0])}</td><td style="font-weight:700;color:${r[1] === '정상' ? 'var(--ok)' : r[1] === '대기' ? 'var(--ink3)' : '#b3261e'}">${esc(r[1])}</td><td>${esc(r[2])}</td></tr>`).join('') + '</tbody>';
+  const bad = rows.filter(r => r[1] !== '정상' && r[1] !== '대기').map(r => r[0]);
+  $('diagHint').textContent = bad.length
+    ? `문제 구간: ${bad.join(', ')}. 회사 보안망에서 해당 사이트(카카오: dapi.kakao.com·*.daumcdn.net, 사이트: mejor03.github.io)가 막혀 있거나 느린지 전산팀에 확인해 보세요. '내용 복사'로 이 결과를 전달할 수 있어요.`
+    : '특별히 느린 구간이 없어요.';
+  $('diagModal').classList.add('show');
+}
+$('diagBtn').onclick = () => openDiag('이 PC에서 각 단계가 얼마나 걸렸는지 보여줍니다. 느리거나 실패한 항목이 원인이에요.');
+$('diagClose').onclick = () => $('diagModal').classList.remove('show');
+$('diagCopy').onclick = async () => {
+  const t = ['[생활권 아파트 지도 연결 진단] ' + new Date().toLocaleString('ko-KR'), navigator.userAgent, ...diagRows().map(r => r.join(' | '))].join('\n');
+  toast(await copyText(t) ? '진단 결과를 복사했어요' : '복사하지 못했어요');
+};
 
 renderSettings();
 renderChips();

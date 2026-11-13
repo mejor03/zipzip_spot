@@ -222,6 +222,46 @@ def norm_basic(it, code, fallback):
     }
 
 
+# ---------------------------------------------------------------- 앱용 지역별 경량 파일
+REGION_RULES = [("서울", "seoul"), ("부산", "busan"), ("대구", "daegu"), ("인천", "incheon"), ("광주", "gwangju"),
+                ("대전", "daejeon"), ("울산", "ulsan"), ("세종", "sejong"), ("경기", "gyeonggi"), ("강원", "gangwon"),
+                ("충북", "chungbuk"), ("충청북", "chungbuk"), ("충남", "chungnam"), ("충청남", "chungnam"),
+                ("전북", "jeonbuk"), ("전라북", "jeonbuk"), ("전남", "jeonnam"), ("전라남", "jeonnam"),
+                ("경북", "gyeongbuk"), ("경상북", "gyeongbuk"), ("경남", "gyeongnam"), ("경상남", "gyeongnam"), ("제주", "jeju")]
+
+
+def region_of(addr):
+    """주소 첫 단어로 지역 이름표를 정함 (앱의 regionOf 와 같은 규칙)"""
+    first = (addr or "").strip().split(" ")[0] if addr else ""
+    for pre, slug in REGION_RULES:
+        if first.startswith(pre):
+            return slug
+    return ""
+
+
+def write_region_files(items, updated, total):
+    """앱이 보이는 지역만 빠르게 받도록 data/apt/{지역}.json 으로 나눠 저장
+    한 단지 = [단지명, 지번주소, 도로명주소, 준공연도, 세대수, 동수]"""
+    base = os.path.join(os.path.dirname(OUT) or ".", "apt")
+    os.makedirs(base, exist_ok=True)
+    groups = {}
+    for r in items:
+        slug = region_of(r.get("a")) or region_of(r.get("r"))
+        if not slug:
+            continue
+        year = int(r["u"][:4]) if (r.get("u") or "")[:4].isdigit() else 0
+        groups.setdefault(slug, []).append([r.get("n", ""), r.get("a", ""), r.get("r", ""), year, r.get("h") or 0, r.get("d") or 0])
+    for name in os.listdir(base):  # 이전 파일 정리
+        if name.endswith(".json"):
+            os.remove(os.path.join(base, name))
+    for slug, rows in groups.items():
+        with open(os.path.join(base, f"{slug}.json"), "w", encoding="utf-8") as f:
+            json.dump(rows, f, ensure_ascii=False, separators=(",", ":"))
+    with open(os.path.join(base, "index.json"), "w", encoding="utf-8") as f:
+        json.dump({"updated": updated, "total": total, "count": sum(len(v) for v in groups.values()),
+                   "regions": {k: len(v) for k, v in sorted(groups.items())}}, f, ensure_ascii=False, separators=(",", ":"))
+
+
 # ---------------------------------------------------------------- 메인
 def main():
     if not KEY:
@@ -339,6 +379,7 @@ def main():
     }
     with open(OUT, "w", encoding="utf-8") as f:
         json.dump(payload, f, ensure_ascii=False, separators=(",", ":"))
+    write_region_files(payload["items"], TODAY, len(listed))
 
     pct = round(len(result) / max(1, len(listed)) * 100, 1)
     summary = [
@@ -362,6 +403,12 @@ def main():
 
 
 if __name__ == "__main__":
+    if "--split-only" in sys.argv:  # API 호출 없이 지역 파일만 다시 만들기
+        with open(OUT, encoding="utf-8") as f:
+            d = json.load(f)
+        write_region_files(d.get("items", []), d.get("updated", TODAY), d.get("total", 0))
+        print("지역 파일 생성 완료")
+        sys.exit(0)
     try:
         main()
     except FatalError as e:

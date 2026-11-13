@@ -47,6 +47,11 @@ class FatalError(Exception):
     pass
 
 
+class TransientError(Exception):
+    """기관 서버 일시 오류(HTTP_ERROR 04 등) — 잠시 뒤 다시 시도하면 되는 오류"""
+    pass
+
+
 def log(*a):
     print(*a, flush=True)
 
@@ -100,6 +105,14 @@ def parse(raw):
         obj = xml_to_obj(ET.fromstring(text))
     else:
         raise FatalError(f"알 수 없는 응답: {text[:300]}")
+    gw = find_key(obj, "returnReasonCode")  # 게이트웨이 오류 형식 (OpenAPI_ServiceResponse)
+    if gw not in (None, "", "00", "0"):
+        gw = str(gw)
+        if gw == "22":
+            raise QuotaError(text[:200])
+        if gw in ("01", "04", "05", "23"):
+            raise TransientError(f"기관 서버 일시 오류(code {gw})")
+        raise FatalError(f"공공데이터포털 오류(code {gw}): {text[:300]}")
     code = find_key(obj, "resultCode")
     if code not in (None, "", "00", "000", 0, "0"):
         msg = find_key(obj, "resultMsg")
@@ -138,6 +151,10 @@ def call(path, params, tries=3, want_raw=False):
             return (obj, raw) if want_raw else obj
         except (QuotaError, FatalError):
             raise
+        except TransientError as e:
+            err = str(e)
+            time.sleep([3, 8, 15][min(i, 2)])
+            continue
         except urllib.error.HTTPError as e:
             body = e.read().decode("utf-8", "replace")
             try:
@@ -152,7 +169,7 @@ def call(path, params, tries=3, want_raw=False):
         except Exception as e:  # 네트워크·일시 오류
             err = repr(e)
         time.sleep(2 * (i + 1))
-    raise RuntimeError(f"{path} 호출 실패: {err}")
+    raise TransientError(f"{path} 호출 실패: {err}")
 
 
 def fetch_list():
@@ -211,15 +228,17 @@ def main():
         log("::error::DATA_GO_KR_KEY 가 비어 있습니다. 저장소 Settings → Secrets and variables → Actions 에 등록해 주세요.")
         sys.exit(1)
 
-    old = {}
+    old, fails = {}, {}
     if os.path.exists(OUT):
         try:
             with open(OUT, encoding="utf-8") as f:
-                for r in json.load(f).get("items", []):
-                    old[r["c"]] = r
+                prev = json.load(f)
+            for r in prev.get("items", []):
+                old[r["c"]] = r
+            fails = prev.get("fails", {}) or {}
         except Exception as e:
             log(f"기존 파일을 읽지 못해 새로 만듭니다: {e}")
-    log(f"기존 수집 단지: {len(old)}곳")
+    log(f"기존 수집 단지: {len(old)}곳, 실패 기록 {len(fails)}곳")
 
     log("1) 전체 단지 목록 받는 중…")
     lst = fetch_list()
@@ -236,7 +255,15 @@ def main():
         b = listed[code]["b"][:2]
         return PRIORITY.index(b) if b in PRIORITY else len(PRIORITY)
 
-    missing = sorted([c for c in listed if c not in old], key=lambda c: (prio(c), c))
+    retry_after = (dt.date.today() - dt.timedelta(days=30)).isoformat()
+
+    def skip(c):  # 3번 넘게 실패한 단지는 30일 뒤에 다시 시도
+        f = fails.get(c)
+        return bool(f) and f.get("n", 0) >= 3 and f.get("last", "") > retry_after
+
+    # 처음 조회하는 단지 → 실패 이력이 있는 단지 순, 각각 서울·경기·인천 우선
+    missing = sorted([c for c in listed if c not in old and not skip(c)],
+                     key=lambda c: (1 if c in fails else 0, prio(c), c))
     cutoff = (dt.date.today() - dt.timedelta(days=STALE_DAYS)).isoformat()
     stale = sorted([c for c in listed if c in old and old[c].get("f", "") < cutoff], key=lambda c: old[c].get("f", ""))
     queue = (missing + stale)[:MAX_CALLS]
@@ -267,12 +294,15 @@ def main():
                 with lock:
                     stats["fail"] += 1
                     stats["empty"] += 1
-                    if stats["empty"] <= 5:
-                        log(f"   {code} 빈 응답 예시: {raw[:300]}")
+                    f = fails.setdefault(code, {"n": 0})
+                    f["n"] += 1; f["last"] = TODAY
+                    if stats["empty"] <= 3:
+                        log(f"   {code} 빈 응답 예시: {' '.join(raw.split())[:300]}")
                 return
             rec = norm_basic(its[0], code, listed.get(code, {}))
             with lock:
                 result[code] = rec
+                fails.pop(code, None)
                 stats["ok"] += 1
                 if stats["ok"] % 250 == 0:
                     log(f"   …{stats['ok']}곳 완료")
@@ -284,10 +314,12 @@ def main():
             stop.set()
             with lock:
                 stats["fatal"] = str(e)
-        except Exception as e:
+        except Exception as e:  # 일시 오류(재시도 후에도 실패)
             with lock:
                 stats["fail"] += 1
-                if stats["fail"] <= 5:
+                f = fails.setdefault(code, {"n": 0})
+                f["n"] += 1; f["last"] = TODAY
+                if stats["fail"] - stats["empty"] <= 3:
                     log(f"   {code} 실패: {e}")
         time.sleep(0.25)
 
@@ -302,6 +334,7 @@ def main():
         "source": "국토교통부 공동주택 단지 목록제공 서비스 · 공동주택 기본 정보제공 서비스 (K-apt)",
         "total": len(listed),
         "count": len(result),
+        "fails": {c: f for c, f in fails.items() if c in listed and c not in result},
         "items": sorted(result.values(), key=lambda r: r["c"]),
     }
     with open(OUT, "w", encoding="utf-8") as f:
@@ -312,7 +345,7 @@ def main():
         f"### 아파트 기본정보 수집 결과 ({TODAY})",
         f"- 전국 단지: **{len(listed):,}곳**",
         f"- 수집 완료: **{len(result):,}곳 ({pct}%)**",
-        f"- 이번 실행: 성공 {stats['ok']:,}곳, 실패 {stats['fail']:,}곳 (그중 빈 응답 {stats['empty']:,}곳)",
+        f"- 이번 실행: 성공 {stats['ok']:,}곳, 실패 {stats['fail']:,}곳 (기관 서버 일시 오류 등, 다음 실행에서 다시 시도)",
     ]
     if stats.get("timeup"):
         summary.append("- 실행 시간이 길어져 중간에 멈추고 저장했습니다. 다음 실행에서 이어서 수집합니다.")
